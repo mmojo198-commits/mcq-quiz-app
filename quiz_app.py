@@ -33,6 +33,19 @@ def extract_letter(s):
         return m2.group(1)
     return None
 
+def find_correct_letter(row):
+    """Find which option letter (A, B, C, D) matches the correct answer."""
+    corr_let = extract_letter(row["Correct Answer"])
+    if not corr_let:
+        # No letter found, match by text
+        correct_text_norm = normalize_text(row["Correct Answer"])
+        for letter in ["A", "B", "C", "D"]:
+            option_text = row.get(f"Option {letter}")
+            if pd.notna(option_text) and normalize_text(option_text) == correct_text_norm:
+                corr_let = letter
+                break
+    return corr_let
+
 def is_correct(selected, correct_raw):
     if not selected:
         return False
@@ -43,13 +56,57 @@ def is_correct(selected, correct_raw):
     selected_text = selected.split(":", 1)[1].strip()
     return normalize_text(selected_text) == normalize_text(correct_raw)
 
+def parse_rationale(rationale_text, selected_letter):
+    """Extract the rationale for the selected wrong answer."""
+    if pd.isna(rationale_text):
+        return None
+    
+    # Split by pipe to get individual explanations
+    parts = str(rationale_text).split("|")
+    
+    for part in parts:
+        part = part.strip()
+        # Check if this part is for the selected option
+        # Format: "Option A: explanation" or "Small Finance Banks: explanation"
+        if part.upper().startswith(f"OPTION {selected_letter}:") or \
+           part.upper().startswith(f"{selected_letter}:"):
+            # Extract the explanation after the colon
+            if ":" in part:
+                return part.split(":", 1)[1].strip()
+        # Also check if the part starts with the actual option text
+        # This handles cases like "Small Finance Banks: explanation"
+        else:
+            # Try to match by checking if part contains the selected option text
+            # We'll return this if we find a match
+            continue
+    
+    # If we didn't find a match by option letter, try another approach
+    # Look for explanations that match option text
+    for part in parts:
+        part = part.strip()
+        if part and ":" in part:
+            option_prefix = part.split(":", 1)[0].strip()
+            # If the prefix doesn't start with "Option", it might be the actual option text
+            if not option_prefix.upper().startswith("OPTION"):
+                # This might be a match - return it if no better match found
+                # For now, we'll try to match this later
+                pass
+    
+    return None
+
 def read_quiz_df(df):
     expected = ["Question", "Option A", "Option B", "Option C", "Option D", "Correct Answer", "Hint"]
     missing = [c for c in expected if c not in df.columns]
     if missing:
         st.error(f"Missing columns in Excel: {missing}. Columns found: {list(df.columns)}")
         return pd.DataFrame()
-    return df[expected].copy()
+    
+    # Include Rationale column if it exists
+    cols_to_keep = expected.copy()
+    if "Rationale (Wrong Answers)" in df.columns:
+        cols_to_keep.append("Rationale (Wrong Answers)")
+    
+    return df[cols_to_keep].copy()
 
 # ---------------------------
 # Session State
@@ -129,7 +186,7 @@ if st.session_state.questions is None:
     
     with st.container(border=True):
         st.write("### 📤 Upload Quiz Data")
-        st.write("Upload an Excel file (.xlsx) with columns: `Question`, `Option A`, `Option B`, `Option C`, `Option D`, `Correct Answer`, `Hint`")
+        st.write("Upload an Excel file (.xlsx) with columns: `Question`, `Option A`, `Option B`, `Option C`, `Option D`, `Correct Answer`, `Hint`, `Rationale (Wrong Answers)`")
         
         uploaded_file = st.file_uploader("Choose file", type=["xlsx"], label_visibility="collapsed")
         
@@ -389,15 +446,53 @@ with st.container(border=True):
             if is_correct(saved_ans, row["Correct Answer"]):
                 st.success("✅ Correct!")
             else:
-                corr_let = extract_letter(row["Correct Answer"])
-                corr_txt = row.get(f"Option {corr_let}", str(row["Correct Answer"]))
-                st.error(f"❌ Incorrect. Correct Answer: **{corr_let}: {corr_txt}**")
+                # Find which option matches the correct answer
+                corr_let = find_correct_letter(row)
+                
+                if corr_let:
+                    corr_txt = row.get(f"Option {corr_let}", str(row["Correct Answer"]))
+                    st.error(f"❌ Incorrect. Correct Answer: **{corr_let}: {corr_txt}**")
+                else:
+                    st.error(f"❌ Incorrect. Correct Answer: **{row['Correct Answer']}**")
+                
+                # Show rationale for wrong answer
+                selected_letter = saved_ans.split(":", 1)[0].strip().upper()
+                if "Rationale (Wrong Answers)" in row and pd.notna(row["Rationale (Wrong Answers)"]):
+                    rationale_text = str(row["Rationale (Wrong Answers)"])
+                    
+                    # Parse rationale to find explanation for the selected wrong option
+                    parts = rationale_text.split("|")
+                    found_rationale = None
+                    
+                    for part in parts:
+                        part = part.strip()
+                        # Check various formats
+                        if part.upper().startswith(f"OPTION {selected_letter}:"):
+                            found_rationale = part.split(":", 1)[1].strip()
+                            break
+                        elif part.startswith(f"{selected_letter}:"):
+                            found_rationale = part.split(":", 1)[1].strip()
+                            break
+                        # Check if it starts with the actual option text
+                        elif part.startswith(row.get(f"Option {selected_letter}", "")):
+                            if ":" in part:
+                                found_rationale = part.split(":", 1)[1].strip()
+                                break
+                    
+                    if found_rationale:
+                        st.info(f"**Why this is wrong:** {found_rationale}")
         else:
             # Handle timed out or skipped
             st.warning("⌛ Answer locked.")
-            corr_let = extract_letter(row["Correct Answer"])
-            corr_txt = row.get(f"Option {corr_let}", str(row["Correct Answer"]))
-            st.markdown(f"**Correct Answer:** {corr_let}: {corr_txt}")
+            
+            # Find which option matches the correct answer
+            corr_let = find_correct_letter(row)
+            
+            if corr_let:
+                corr_txt = row.get(f"Option {corr_let}", str(row["Correct Answer"]))
+                st.markdown(f"**Correct Answer:** {corr_let}: {corr_txt}")
+            else:
+                st.markdown(f"**Correct Answer:** {row['Correct Answer']}")
 
     if not is_submitted:
         if pd.notna(row.get("Hint")) and st.checkbox("Show Hint"):
