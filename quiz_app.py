@@ -46,40 +46,42 @@ def find_correct_letter(row):
         # No letter found, match by exact text comparison (case-insensitive, whitespace-normalized)
         correct_text_norm = normalize_text(row["Correct Answer"])
         
-        # Debug: Track all matches
-        matches = []
+        # First pass: Try exact match
         for letter in ["A", "B", "C", "D"]:
             option_text = row.get(f"Option {letter}")
             if pd.notna(option_text):
                 option_text_norm = normalize_text(option_text)
-                # Must be exact match, not just starts with
+                # Must be exact match
                 if option_text_norm == correct_text_norm:
-                    matches.append(letter)
+                    return letter
         
-        # If we found exactly one match, use it
-        if len(matches) == 1:
-            corr_let = matches[0]
-        elif len(matches) > 1:
-            # Multiple matches - this shouldn't happen, use first one
-            corr_let = matches[0]
-        else:
-            # No exact match found - try partial matching as fallback
-            # Find the option that contains the correct answer or vice versa
-            best_match = None
-            best_match_len = 0
-            for letter in ["A", "B", "C", "D"]:
-                option_text = row.get(f"Option {letter}")
-                if pd.notna(option_text):
-                    option_text_norm = normalize_text(option_text)
-                    # Check if correct answer is contained in this option
-                    if correct_text_norm in option_text_norm or option_text_norm in correct_text_norm:
-                        # Use the longest match
-                        match_len = min(len(correct_text_norm), len(option_text_norm))
-                        if match_len > best_match_len:
-                            best_match = letter
-                            best_match_len = match_len
-            if best_match:
-                corr_let = best_match
+        # Second pass: If no exact match, try finding best substring match
+        # This handles cases where there might be minor differences
+        best_match = None
+        best_match_score = 0
+        
+        for letter in ["A", "B", "C", "D"]:
+            option_text = row.get(f"Option {letter}")
+            if pd.notna(option_text):
+                option_text_norm = normalize_text(option_text)
+                
+                # Calculate similarity: if one contains the other completely
+                if correct_text_norm in option_text_norm:
+                    # Correct answer is subset of option
+                    score = len(correct_text_norm) / len(option_text_norm)
+                    if score > best_match_score:
+                        best_match = letter
+                        best_match_score = score
+                elif option_text_norm in correct_text_norm:
+                    # Option is subset of correct answer
+                    score = len(option_text_norm) / len(correct_text_norm)
+                    if score > best_match_score:
+                        best_match = letter
+                        best_match_score = score
+        
+        if best_match and best_match_score > 0.9:  # Only accept if 90%+ match
+            corr_let = best_match
+    
     return corr_let
 
 def is_correct(selected, correct_raw):
@@ -492,42 +494,67 @@ with st.container(border=True):
     if is_submitted:
         st.divider()
         if saved_ans:
-            if is_correct(saved_ans, row["Correct Answer"]):
+            # Get fresh row data
+            current_row = st.session_state.questions.iloc[i]
+            
+            if is_correct(saved_ans, current_row["Correct Answer"]):
                 st.success("✅ Correct!")
             else:
                 # Find which option matches the correct answer
-                corr_let = find_correct_letter(row)
+                corr_let = find_correct_letter(current_row)
                 
                 if corr_let:
-                    corr_txt = row.get(f"Option {corr_let}", str(row["Correct Answer"]))
+                    corr_txt = current_row.get(f"Option {corr_let}", str(current_row["Correct Answer"]))
                     st.error(f"❌ Incorrect. Correct Answer: **{corr_let}: {corr_txt}**")
                 else:
-                    st.error(f"❌ Incorrect. Correct Answer: **{row['Correct Answer']}**")
+                    st.error(f"❌ Incorrect. Correct Answer: **{current_row['Correct Answer']}**")
                 
                 # DEBUG: Show what was compared (remove this after testing)
                 with st.expander("🔍 Debug Info (for testing)"):
                     st.write(f"**Your selection:** {saved_ans}")
                     st.write(f"**Your Selected Letter:** {saved_ans.split(':', 1)[0].strip().upper()}")
-                    st.write(f"**Correct Answer from Excel:** `{row['Correct Answer']}`")
-                    st.write(f"**Correct Answer (normalized):** `{normalize_text(row['Correct Answer'])}`")
+                    st.write(f"**Correct Answer from Excel:** `{current_row['Correct Answer']}`")
+                    st.write(f"**Correct Answer (normalized):** `{normalize_text(current_row['Correct Answer'])}`")
                     st.write(f"**Detected Correct Letter:** {corr_let}")
-                    st.write("**All Options (with normalized text):**")
+                    
+                    # Test find_correct_letter again with debugging
+                    st.write("---")
+                    st.write("**Testing find_correct_letter() step-by-step:**")
+                    test_correct_norm = normalize_text(current_row['Correct Answer'])
+                    st.write(f"Correct answer normalized: `{test_correct_norm}`")
+                    st.write(f"Length: {len(test_correct_norm)}")
+                    
                     for letter in ["A", "B", "C", "D"]:
-                        opt = row.get(f"Option {letter}")
+                        opt = current_row.get(f"Option {letter}")
                         if pd.notna(opt):
                             opt_norm = normalize_text(opt)
-                            match_indicator = "✅ MATCH" if opt_norm == normalize_text(row['Correct Answer']) else ""
+                            is_exact_match = (opt_norm == test_correct_norm)
+                            st.write(f"**Option {letter}:**")
+                            st.write(f"  - Text: `{opt}`")
+                            st.write(f"  - Normalized: `{opt_norm}`")
+                            st.write(f"  - Length: {len(opt_norm)}")
+                            st.write(f"  - Exact match (==): {is_exact_match}")
+                            if is_exact_match:
+                                st.success(f"  ✅ This should be the match!")
+                    
+                    st.write("---")
+                    st.write("**All Options (with normalized text):**")
+                    for letter in ["A", "B", "C", "D"]:
+                        opt = current_row.get(f"Option {letter}")
+                        if pd.notna(opt):
+                            opt_norm = normalize_text(opt)
+                            match_indicator = "✅ MATCH" if opt_norm == normalize_text(current_row['Correct Answer']) else ""
                             st.write(f"  - **{letter}:** {opt}")
                             st.write(f"    *Normalized:* `{opt_norm}` {match_indicator}")
                     
                     # Show comparison result
                     st.write("---")
-                    st.write(f"**is_correct() returned:** {is_correct(saved_ans, row['Correct Answer'])}")
+                    st.write(f"**is_correct() returned:** {is_correct(saved_ans, current_row['Correct Answer'])}")
                 
                 # Show rationale for wrong answer
                 selected_letter = saved_ans.split(":", 1)[0].strip().upper()
-                if "Rationale (Wrong Answers)" in row and pd.notna(row["Rationale (Wrong Answers)"]):
-                    rationale_text = str(row["Rationale (Wrong Answers)"])
+                if "Rationale (Wrong Answers)" in current_row and pd.notna(current_row["Rationale (Wrong Answers)"]):
+                    rationale_text = str(current_row["Rationale (Wrong Answers)"])
                     
                     # Parse rationale to find explanation for the selected wrong option
                     parts = rationale_text.split("|")
@@ -543,7 +570,7 @@ with st.container(border=True):
                             found_rationale = part.split(":", 1)[1].strip()
                             break
                         # Check if it starts with the actual option text
-                        elif part.startswith(row.get(f"Option {selected_letter}", "")):
+                        elif part.startswith(current_row.get(f"Option {selected_letter}", "")):
                             if ":" in part:
                                 found_rationale = part.split(":", 1)[1].strip()
                                 break
