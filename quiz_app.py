@@ -4,9 +4,6 @@ import time
 import re
 from pathlib import Path
 
-# ---------------------------
-# Config
-# ---------------------------
 st.set_page_config(page_title="MCQ Quiz", page_icon="🎯", layout="wide")
 
 LOCAL_UPLOADED_FILE_PATH = "/mnt/data/f8416257-dc87-4746-a6b6-00755d7ca1d9.png"
@@ -34,10 +31,8 @@ def extract_letter(s):
     return None
 
 def find_correct_letter(row):
-    """Find which option letter (A, B, C, D) matches the correct answer."""
     corr_let = extract_letter(row["Correct Answer"])
     if not corr_let:
-        # No letter found, match by text
         correct_text_norm = normalize_text(row["Correct Answer"])
         for letter in ["A", "B", "C", "D"]:
             option_text = row.get(f"Option {letter}")
@@ -49,49 +44,31 @@ def find_correct_letter(row):
 def is_correct(selected, correct_raw):
     if not selected:
         return False
-    selected_letter = selected.split(":", 1)[0].strip().upper()
+    # Always try to compare by letter prefix first
+    selected_letter = selected.split(":", 1)[0].strip().upper() if ":" in selected else selected.strip().upper()
     correct_letter = extract_letter(correct_raw)
-    if correct_letter:
+    if correct_letter and selected_letter in ["A", "B", "C", "D"]:
         return selected_letter == correct_letter
-    selected_text = selected.split(":", 1)[1].strip()
+    # Fall back to text matching
+    selected_text = selected.split(":", 1)[1].strip() if ":" in selected else ""
     return normalize_text(selected_text) == normalize_text(correct_raw)
 
 def parse_rationale(rationale_text, selected_letter):
-    """Extract the rationale for the selected wrong answer."""
     if pd.isna(rationale_text):
         return None
-    
-    # Split by pipe to get individual explanations
     parts = str(rationale_text).split("|")
-    
     for part in parts:
         part = part.strip()
-        # Check if this part is for the selected option
-        # Format: "Option A: explanation" or "Small Finance Banks: explanation"
-        if part.upper().startswith(f"OPTION {selected_letter}:") or \
-           part.upper().startswith(f"{selected_letter}:"):
-            # Extract the explanation after the colon
+        # Check for different explanatory formats
+        if part.upper().startswith(f"OPTION {selected_letter}:") or part.upper().startswith(f"{selected_letter}:"):
             if ":" in part:
                 return part.split(":", 1)[1].strip()
-        # Also check if the part starts with the actual option text
-        # This handles cases like "Small Finance Banks: explanation"
-        else:
-            # Try to match by checking if part contains the selected option text
-            # We'll return this if we find a match
-            continue
-    
-    # If we didn't find a match by option letter, try another approach
-    # Look for explanations that match option text
     for part in parts:
         part = part.strip()
         if part and ":" in part:
             option_prefix = part.split(":", 1)[0].strip()
-            # If the prefix doesn't start with "Option", it might be the actual option text
             if not option_prefix.upper().startswith("OPTION"):
-                # This might be a match - return it if no better match found
-                # For now, we'll try to match this later
                 pass
-    
     return None
 
 def read_quiz_df(df):
@@ -100,12 +77,9 @@ def read_quiz_df(df):
     if missing:
         st.error(f"Missing columns in Excel: {missing}. Columns found: {list(df.columns)}")
         return pd.DataFrame()
-    
-    # Include Rationale column if it exists
     cols_to_keep = expected.copy()
     if "Rationale (Wrong Answers)" in df.columns:
         cols_to_keep.append("Rationale (Wrong Answers)")
-    
     return df[cols_to_keep].copy()
 
 # ---------------------------
@@ -145,35 +119,21 @@ def update_score():
     st.session_state.score = sc
 
 def save_time_state():
-    """Updates the time spent for the current question."""
     i = st.session_state.index
     if st.session_state.question_start_time is not None:
         elapsed = time.time() - st.session_state.question_start_time
         current_total = st.session_state.time_spent.get(i, 0)
-        
         if st.session_state.timer_per_question is None:
-            # No cap if 'No timer' is selected
             st.session_state.time_spent[i] = current_total + elapsed
         else:
-            # Cap at max time allowed
             st.session_state.time_spent[i] = min(st.session_state.timer_per_question, current_total + elapsed)
 
-# ---------------------------
-# Navigation Handler
-# ---------------------------
 def handle_navigation(new_index):
-    """Handles saving state before navigating to a different question."""
     i = st.session_state.index
-    
-    # 1. Save time
     save_time_state()
-    
-    # 2. Save answer if not already submitted (auto-save draft)
     current_selected = st.session_state.get(f"radio_{i}")
     if not st.session_state.submitted_q.get(i, False):
         st.session_state.answers[i] = current_selected
-
-    # 3. Update pointer
     st.session_state.index = new_index
     st.session_state.question_start_time = time.time()
     st.rerun()
@@ -183,16 +143,12 @@ def handle_navigation(new_index):
 # ---------------------------
 if st.session_state.questions is None:
     st.title("📘 Interactive MCQ Quiz")
-    
     with st.container(border=True):
         st.write("### 📤 Upload Quiz Data")
         st.write("Upload an Excel file (.xlsx) with columns: `Question`, `Option A`, `Option B`, `Option C`, `Option D`, `Correct Answer`, `Hint`, `Rationale (Wrong Answers)`")
-        
         uploaded_file = st.file_uploader("Choose file", type=["xlsx"], label_visibility="collapsed")
-        
         df = None
         if uploaded_file is None:
-            # Fallback logic for demo or local testing
             p = Path("/mnt/data")
             if p.exists():
                 xlsx_files = sorted(p.glob("*.xlsx"))
@@ -212,7 +168,6 @@ if st.session_state.questions is None:
             except Exception as e:
                 st.error(f"Error: {e}")
                 df = None
-
         if df is not None and not df.empty:
             st.session_state.questions = df.reset_index(drop=True)
             st.session_state.quiz_started = False
@@ -226,18 +181,13 @@ if st.session_state.questions is None:
 # ---------------------------
 if st.session_state.questions is not None and not st.session_state.quiz_started:
     st.title("⚙️ Quiz Setup")
-    
     with st.container(border=True):
         st.write(f"**Total Questions:** {len(st.session_state.questions)}")
-        
         TIMER_OPTIONS = ["No timer", 10, 15, 20, 30, 45, 60]
-        
-        # Determine default index
         try:
             default_idx = TIMER_OPTIONS.index(st.session_state.timer_choice)
         except ValueError:
             default_idx = TIMER_OPTIONS.index(30)
-
         col1, col2 = st.columns(2)
         with col1:
             st.session_state.shuffle = st.checkbox("Shuffle Questions", value=st.session_state.shuffle)
@@ -247,33 +197,26 @@ if st.session_state.questions is not None and not st.session_state.quiz_started:
                 TIMER_OPTIONS, 
                 index=default_idx
             )
-
         st.divider()
-        
         if st.button("🚀 Start Quiz", use_container_width=True, type="primary"):
             questions_df = st.session_state.questions
             if st.session_state.shuffle:
                 st.session_state.questions = questions_df.sample(frac=1, random_state=int(time.time())).reset_index(drop=True)
             else:
                 st.session_state.questions = questions_df.reset_index(drop=True)
-                
             st.session_state.index = 0
             st.session_state.answers = {}
             st.session_state.time_spent = {}
             st.session_state.submitted_q = {}
-            
-            # Set timer config
             if st.session_state.timer_choice == "No timer":
                 st.session_state.timer_per_question = None
             else:
                 st.session_state.timer_per_question = int(st.session_state.timer_choice)
-                
             st.session_state.question_start_time = time.time()
             st.session_state.quiz_started = True
             st.session_state.finished = False
             st.session_state.score = 0
             st.rerun()
-            
         if st.button("🔄 Reset File"):
             st.session_state.questions = None
             st.rerun()
@@ -284,30 +227,23 @@ if st.session_state.questions is not None and not st.session_state.quiz_started:
 # ---------------------------
 if st.session_state.finished:
     st.title("🏆 Quiz Results")
-    
     total_q = len(st.session_state.questions)
     percentage = (st.session_state.score / total_q) * 100
-    
     col_res1, col_res2 = st.columns([1, 3])
     with col_res1:
         st.metric("Final Score", f"{st.session_state.score} / {total_q}")
     with col_res2:
         st.progress(st.session_state.score / total_q)
         st.caption(f"Accuracy: {percentage:.1f}%")
-
     st.divider()
-    
-    # Summary Table
     results_data = []
     for idx in range(total_q):
         q = st.session_state.questions.iloc[idx]
         user_ans = st.session_state.answers.get(idx)
         correct_raw = q["Correct Answer"]
-        
         is_corr = False
         if user_ans:
             is_corr = is_correct(user_ans, correct_raw)
-            
         results_data.append({
             "No.": idx + 1,
             "Question": q["Question"],
@@ -315,9 +251,7 @@ if st.session_state.finished:
             "Correct Answer": correct_raw,
             "Result": "✅" if is_corr else "❌"
         })
-    
     st.dataframe(pd.DataFrame(results_data), use_container_width=True, hide_index=True)
-    
     col_act1, col_act2 = st.columns(2)
     with col_act1:
         if st.button("🔁 Retry Same Questions", use_container_width=True):
@@ -341,64 +275,46 @@ row = questions.iloc[i]
 is_submitted = st.session_state.submitted_q.get(i, False)
 time_allowed = st.session_state.timer_per_question
 
-# --- SIDEBAR: Timer & Map ---
 with st.sidebar:
     st.markdown("### ⏳ Timer")
-    
-    # Initialize Time if needed
     if st.session_state.question_start_time is None:
         st.session_state.question_start_time = time.time()
-        
-    # --- Logic for Timer Display ---
     if time_allowed is None:
-        # NO TIMER MODE
         st.markdown("<h3 style='text-align: center; color: green; margin: 0;'>Unlimited</h3>", unsafe_allow_html=True)
         st.progress(1.0)
-        remaining = None # Flag as none
+        remaining = None
     else:
-        # TIMER MODE
         if is_submitted:
             time_spent = st.session_state.time_spent.get(i, 0)
         else:
             elapsed = time.time() - st.session_state.question_start_time
             previous_time = st.session_state.time_spent.get(i, 0)
             time_spent = min(time_allowed, previous_time + elapsed)
-            
         remaining = max(0, time_allowed - time_spent)
-        
         timer_color = "red" if remaining < 5 else "blue"
         st.markdown(f"<h1 style='text-align: center; color: {timer_color}; margin: 0;'>{int(remaining)}s</h1>", unsafe_allow_html=True)
         st.progress(min(1.0, max(0.0, remaining / time_allowed)))
-
     st.divider()
     st.markdown("### 🗺️ Question Map")
-    
-    # Dynamic Grid
     cols_per_row = 4
     for r in range(0, total_q, cols_per_row):
         cols = st.columns(cols_per_row)
         for c_idx, q_idx in enumerate(range(r, min(r + cols_per_row, total_q))):
             with cols[c_idx]:
-                # Determine styling
                 btn_type = "secondary"
                 lbl = str(q_idx + 1)
-                
                 if q_idx == i:
                     btn_type = "primary"
                     lbl = f"▶ {q_idx+1}"
                 elif st.session_state.submitted_q.get(q_idx):
-                    # Check if correct
                     hist_ans = st.session_state.answers.get(q_idx)
                     if hist_ans and is_correct(hist_ans, st.session_state.questions.iloc[q_idx]["Correct Answer"]):
                         lbl = f"✓ {q_idx+1}"
                     else:
                         lbl = f"✗ {q_idx+1}"
-                
                 if st.button(lbl, key=f"nav_{q_idx}", use_container_width=True, type=btn_type):
-                     handle_navigation(q_idx)
-                     
+                    handle_navigation(q_idx)
     st.divider()
-    # Finish Button in Sidebar
     can_finish = (i == total_q - 1) or is_submitted
     if st.button("🏁 Finish Quiz", use_container_width=True, type="primary" if i == total_q - 1 else "secondary"):
         save_time_state()
@@ -406,105 +322,85 @@ with st.sidebar:
         if not is_submitted:
             st.session_state.answers[i] = curr
             st.session_state.submitted_q[i] = True
-            
         update_score()
         st.session_state.finished = True
         st.rerun()
 
-# --- MAIN CONTENT ---
 st.markdown(f"#### Question {i + 1} of {total_q}")
 st.progress((i) / total_q)
-
 with st.container(border=True):
     st.markdown(f"### {row['Question']}")
-    
     options = [
         ("A", row["Option A"]), ("B", row["Option B"]),
         ("C", row["Option C"]), ("D", row["Option D"]),
     ]
     display_options = [f"{letter}: {text}" for letter, text in options if pd.notna(text)]
-
-    # Persist Selection logic
+    # Restore selection by letter prefix, not by raw string
     saved_ans = st.session_state.answers.get(i, None)
-    
     radio_idx = None
-    if saved_ans in display_options:
-        radio_idx = display_options.index(saved_ans)
-        
+    if saved_ans:
+        if ":" in saved_ans:
+            saved_letter = saved_ans.split(":", 1)[0].strip().upper()
+            for idx, opt in enumerate(display_options):
+                if opt.startswith(f"{saved_letter}:"):
+                    radio_idx = idx
+                    break
+        elif saved_ans in display_options:
+            radio_idx = display_options.index(saved_ans)
     selected = st.radio(
-        "Select your answer:", 
-        display_options, 
-        index=radio_idx, 
-        key=f"radio_{i}", 
+        "Select your answer:",
+        display_options,
+        index=radio_idx,
+        key=f"radio_{i}",
         disabled=is_submitted
     )
-
-    # Feedback Area
     if is_submitted:
         st.divider()
         if saved_ans:
             if is_correct(saved_ans, row["Correct Answer"]):
                 st.success("✅ Correct!")
             else:
-                # Find which option matches the correct answer
                 corr_let = find_correct_letter(row)
-                
                 if corr_let:
                     corr_txt = row.get(f"Option {corr_let}", str(row["Correct Answer"]))
                     st.error(f"❌ Incorrect. Correct Answer: **{corr_let}: {corr_txt}**")
                 else:
                     st.error(f"❌ Incorrect. Correct Answer: **{row['Correct Answer']}**")
-                
-                # Show rationale for wrong answer
                 selected_letter = saved_ans.split(":", 1)[0].strip().upper()
                 if "Rationale (Wrong Answers)" in row and pd.notna(row["Rationale (Wrong Answers)"]):
                     rationale_text = str(row["Rationale (Wrong Answers)"])
-                    
-                    # Parse rationale to find explanation for the selected wrong option
                     parts = rationale_text.split("|")
                     found_rationale = None
-                    
                     for part in parts:
                         part = part.strip()
-                        # Check various formats
                         if part.upper().startswith(f"OPTION {selected_letter}:"):
                             found_rationale = part.split(":", 1)[1].strip()
                             break
                         elif part.startswith(f"{selected_letter}:"):
                             found_rationale = part.split(":", 1)[1].strip()
                             break
-                        # Check if it starts with the actual option text
                         elif part.startswith(row.get(f"Option {selected_letter}", "")):
                             if ":" in part:
                                 found_rationale = part.split(":", 1)[1].strip()
                                 break
-                    
                     if found_rationale:
                         st.info(f"**Why this is wrong:** {found_rationale}")
         else:
-            # Handle timed out or skipped
             st.warning("⌛ Answer locked.")
-            
-            # Find which option matches the correct answer
             corr_let = find_correct_letter(row)
-            
             if corr_let:
                 corr_txt = row.get(f"Option {corr_let}", str(row["Correct Answer"]))
                 st.markdown(f"**Correct Answer:** {corr_let}: {corr_txt}")
             else:
                 st.markdown(f"**Correct Answer:** {row['Correct Answer']}")
-
     if not is_submitted:
         if pd.notna(row.get("Hint")) and st.checkbox("Show Hint"):
             st.info(f"💡 Hint: {row['Hint']}")
 
-# --- FOOTER NAV ---
 col_prev, col_submit, col_next = st.columns([1, 2, 1])
-
 with col_prev:
     if st.button("⬅️ Previous", disabled=(i == 0), use_container_width=True):
         handle_navigation(i - 1)
-
 with col_submit:
     if not is_submitted:
         if st.button("🔒 Submit Answer", type="primary", use_container_width=True):
@@ -513,14 +409,10 @@ with col_submit:
             st.session_state.submitted_q[i] = True
             update_score()
             st.rerun()
-
 with col_next:
     if st.button("Next ➡️", disabled=(i == total_q - 1), use_container_width=True):
         handle_navigation(i + 1)
-
-# --- AUTO-ACTION (ONLY IF TIMER EXISTS) ---
 if time_allowed is not None:
-    # If timer is active, check for timeout
     if remaining is not None and remaining <= 0 and not is_submitted:
         st.session_state.time_spent[i] = time_allowed
         st.session_state.submitted_q[i] = True
@@ -530,8 +422,6 @@ if time_allowed is not None:
         st.warning("⏰ Time's Up!")
         time.sleep(1)
         st.rerun()
-
     elif not is_submitted:
-        # Heartbeat for timer refresh (only needed if timer is running)
-        time.sleep(1.0) 
+        time.sleep(1.0)
         st.rerun()
