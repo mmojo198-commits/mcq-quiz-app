@@ -37,24 +37,40 @@ def find_correct_letter(row):
     """Find which option letter (A, B, C, D) matches the correct answer."""
     corr_let = extract_letter(row["Correct Answer"])
     if not corr_let:
-        # No letter found, match by text
+        # No letter found, match by exact text comparison (case-insensitive, whitespace-normalized)
         correct_text_norm = normalize_text(row["Correct Answer"])
         for letter in ["A", "B", "C", "D"]:
             option_text = row.get(f"Option {letter}")
-            if pd.notna(option_text) and normalize_text(option_text) == correct_text_norm:
-                corr_let = letter
-                break
+            if pd.notna(option_text):
+                option_text_norm = normalize_text(option_text)
+                # Must be exact match, not just starts with
+                if option_text_norm == correct_text_norm:
+                    corr_let = letter
+                    break
     return corr_let
 
 def is_correct(selected, correct_raw):
     if not selected:
         return False
+    
+    # Extract the selected letter (A, B, C, D)
     selected_letter = selected.split(":", 1)[0].strip().upper()
+    
+    # Try to extract letter from correct answer
     correct_letter = extract_letter(correct_raw)
+    
     if correct_letter:
+        # If we have a letter in the correct answer, compare letters directly
         return selected_letter == correct_letter
-    selected_text = selected.split(":", 1)[1].strip()
-    return normalize_text(selected_text) == normalize_text(correct_raw)
+    
+    # If no letter in correct answer, compare the full text
+    # Extract the text after the colon from selected answer
+    if ":" in selected:
+        selected_text = selected.split(":", 1)[1].strip()
+        # Must be exact match of the full text
+        return normalize_text(selected_text) == normalize_text(correct_raw)
+    
+    return False
 
 def parse_rationale(rationale_text, selected_letter):
     """Extract the rationale for the selected wrong answer."""
@@ -454,6 +470,18 @@ with st.container(border=True):
                     st.error(f"❌ Incorrect. Correct Answer: **{corr_let}: {corr_txt}**")
                 else:
                     st.error(f"❌ Incorrect. Correct Answer: **{row['Correct Answer']}**")
+                
+                # DEBUG: Show what was compared (remove this after testing)
+                with st.expander("🔍 Debug Info (for testing)"):
+                    st.write(f"**Your selection:** {saved_ans}")
+                    st.write(f"**Correct Answer from Excel:** {row['Correct Answer']}")
+                    st.write(f"**Detected Correct Letter:** {corr_let}")
+                    st.write(f"**Your Selected Letter:** {saved_ans.split(':', 1)[0].strip().upper()}")
+                    st.write("**All Options:**")
+                    for letter in ["A", "B", "C", "D"]:
+                        opt = row.get(f"Option {letter}")
+                        if pd.notna(opt):
+                            st.write(f"  - {letter}: {opt}")
                 
                 # Show rationale for wrong answer
                 selected_letter = saved_ans.split(":", 1)[0].strip().upper()
