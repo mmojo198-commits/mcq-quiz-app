@@ -17,7 +17,13 @@ LOCAL_UPLOADED_FILE_PATH = "/mnt/data/f8416257-dc87-4746-a6b6-00755d7ca1d9.png"
 def normalize_text(s):
     if pd.isna(s):
         return ""
-    return " ".join(str(s).strip().lower().split())
+    # Convert to string, lowercase, remove extra whitespace, and remove common punctuation
+    text = str(s).strip().lower()
+    # Remove multiple spaces and normalize
+    text = " ".join(text.split())
+    # Remove trailing periods and commas that might differ
+    text = text.rstrip('.,;:')
+    return text
 
 def extract_letter(s):
     if s is None:
@@ -39,14 +45,41 @@ def find_correct_letter(row):
     if not corr_let:
         # No letter found, match by exact text comparison (case-insensitive, whitespace-normalized)
         correct_text_norm = normalize_text(row["Correct Answer"])
+        
+        # Debug: Track all matches
+        matches = []
         for letter in ["A", "B", "C", "D"]:
             option_text = row.get(f"Option {letter}")
             if pd.notna(option_text):
                 option_text_norm = normalize_text(option_text)
                 # Must be exact match, not just starts with
                 if option_text_norm == correct_text_norm:
-                    corr_let = letter
-                    break
+                    matches.append(letter)
+        
+        # If we found exactly one match, use it
+        if len(matches) == 1:
+            corr_let = matches[0]
+        elif len(matches) > 1:
+            # Multiple matches - this shouldn't happen, use first one
+            corr_let = matches[0]
+        else:
+            # No exact match found - try partial matching as fallback
+            # Find the option that contains the correct answer or vice versa
+            best_match = None
+            best_match_len = 0
+            for letter in ["A", "B", "C", "D"]:
+                option_text = row.get(f"Option {letter}")
+                if pd.notna(option_text):
+                    option_text_norm = normalize_text(option_text)
+                    # Check if correct answer is contained in this option
+                    if correct_text_norm in option_text_norm or option_text_norm in correct_text_norm:
+                        # Use the longest match
+                        match_len = min(len(correct_text_norm), len(option_text_norm))
+                        if match_len > best_match_len:
+                            best_match = letter
+                            best_match_len = match_len
+            if best_match:
+                corr_let = best_match
     return corr_let
 
 def is_correct(selected, correct_raw):
@@ -474,14 +507,22 @@ with st.container(border=True):
                 # DEBUG: Show what was compared (remove this after testing)
                 with st.expander("🔍 Debug Info (for testing)"):
                     st.write(f"**Your selection:** {saved_ans}")
-                    st.write(f"**Correct Answer from Excel:** {row['Correct Answer']}")
-                    st.write(f"**Detected Correct Letter:** {corr_let}")
                     st.write(f"**Your Selected Letter:** {saved_ans.split(':', 1)[0].strip().upper()}")
-                    st.write("**All Options:**")
+                    st.write(f"**Correct Answer from Excel:** `{row['Correct Answer']}`")
+                    st.write(f"**Correct Answer (normalized):** `{normalize_text(row['Correct Answer'])}`")
+                    st.write(f"**Detected Correct Letter:** {corr_let}")
+                    st.write("**All Options (with normalized text):**")
                     for letter in ["A", "B", "C", "D"]:
                         opt = row.get(f"Option {letter}")
                         if pd.notna(opt):
-                            st.write(f"  - {letter}: {opt}")
+                            opt_norm = normalize_text(opt)
+                            match_indicator = "✅ MATCH" if opt_norm == normalize_text(row['Correct Answer']) else ""
+                            st.write(f"  - **{letter}:** {opt}")
+                            st.write(f"    *Normalized:* `{opt_norm}` {match_indicator}")
+                    
+                    # Show comparison result
+                    st.write("---")
+                    st.write(f"**is_correct() returned:** {is_correct(saved_ans, row['Correct Answer'])}")
                 
                 # Show rationale for wrong answer
                 selected_letter = saved_ans.split(":", 1)[0].strip().upper()
