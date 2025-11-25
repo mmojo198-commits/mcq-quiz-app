@@ -42,47 +42,26 @@ def extract_letter(s):
 def find_correct_letter(row):
     """Find which option letter (A, B, C, D) matches the correct answer."""
     corr_let = extract_letter(row["Correct Answer"])
-    if not corr_let:
-        # No letter found, match by exact text comparison (case-insensitive, whitespace-normalized)
-        correct_text_norm = normalize_text(row["Correct Answer"])
-        
-        # First pass: Try exact match
-        for letter in ["A", "B", "C", "D"]:
-            option_text = row.get(f"Option {letter}")
-            if pd.notna(option_text):
-                option_text_norm = normalize_text(option_text)
-                # Must be exact match
-                if option_text_norm == correct_text_norm:
-                    return letter
-        
-        # Second pass: If no exact match, try finding best substring match
-        # This handles cases where there might be minor differences
-        best_match = None
-        best_match_score = 0
-        
-        for letter in ["A", "B", "C", "D"]:
-            option_text = row.get(f"Option {letter}")
-            if pd.notna(option_text):
-                option_text_norm = normalize_text(option_text)
-                
-                # Calculate similarity: if one contains the other completely
-                if correct_text_norm in option_text_norm:
-                    # Correct answer is subset of option
-                    score = len(correct_text_norm) / len(option_text_norm)
-                    if score > best_match_score:
-                        best_match = letter
-                        best_match_score = score
-                elif option_text_norm in correct_text_norm:
-                    # Option is subset of correct answer
-                    score = len(option_text_norm) / len(correct_text_norm)
-                    if score > best_match_score:
-                        best_match = letter
-                        best_match_score = score
-        
-        if best_match and best_match_score > 0.9:  # Only accept if 90%+ match
-            corr_let = best_match
     
-    return corr_let
+    if corr_let:
+        # If we extracted a letter directly, return it
+        return corr_let
+    
+    # No letter found, match by exact text comparison (case-insensitive, whitespace-normalized)
+    correct_text_norm = normalize_text(row["Correct Answer"])
+    
+    # Try exact match for each option
+    for letter in ["A", "B", "C", "D"]:
+        option_text = row.get(f"Option {letter}")
+        if pd.notna(option_text):
+            option_text_norm = normalize_text(option_text)
+            # Must be exact match
+            if option_text_norm == correct_text_norm:
+                return letter
+    
+    # If no exact match found, return None
+    # Don't try fuzzy matching as it causes false positives
+    return None
 
 def is_correct(selected, correct_raw):
     if not selected:
