@@ -75,22 +75,6 @@ def is_correct(selected, correct_raw):
     
     return False
 
-def parse_rationale(rationale_text, selected_letter):
-    """Extract the rationale for the selected wrong answer."""
-    if pd.isna(rationale_text):
-        return None
-    
-    parts = str(rationale_text).split("|")
-    
-    for part in parts:
-        part = part.strip()
-        # Check for different explanatory formats
-        if part.upper().startswith(f"OPTION {selected_letter}:") or part.upper().startswith(f"{selected_letter}:"):
-            if ":" in part:
-                return part.split(":", 1)[1].strip()
-    
-    return None
-
 def read_quiz_df(df):
     """Read and validate quiz DataFrame."""
     expected = ["Question", "Option A", "Option B", "Option C", "Option D", "Correct Answer", "Hint"]
@@ -100,8 +84,9 @@ def read_quiz_df(df):
         return pd.DataFrame()
     
     cols_to_keep = expected.copy()
-    if "Rationale (Wrong Answers)" in df.columns:
-        cols_to_keep.append("Rationale (Wrong Answers)")
+    for letter in ["A", "B", "C", "D"]:
+        if f"Rationale {letter}" in df.columns:
+            cols_to_keep.append(f"Rationale {letter}")
     
     return df[cols_to_keep].copy()
 
@@ -179,25 +164,23 @@ if st.session_state.questions is None:
     
     with st.container(border=True):
         st.write("### 📤 Upload Quiz Data")
-        st.write("Upload an Excel file (.xlsx) with columns: `Question`, `Option A`, `Option B`, `Option C`, `Option D`, `Correct Answer`, `Hint`, `Rationale (Wrong Answers)`")
+        st.write("Upload an Excel file (.xlsx) with columns: `Question`, `Option A`, `Option B`, `Option C`, `Option D`, `Correct Answer`, `Hint`, and `Rationale [A-D]`")
         
         uploaded_file = st.file_uploader("Choose file", type=["xlsx"], label_visibility="collapsed")
         
         df = None
         if uploaded_file is None:
             # Fallback logic for demo or local testing
-            p = Path("/mnt/data")
+            p = Path("cleaned_quiz_full_rationale.xlsx")
             if p.exists():
-                xlsx_files = sorted(p.glob("*.xlsx"))
-                if xlsx_files:
-                    fallback_path = xlsx_files[0].as_posix()
-                    st.info(f"Auto-detected file: `{fallback_path}`")
-                    if st.button("Load Auto-detected File"):
-                        try:
-                            df_raw = pd.read_excel(fallback_path)
-                            df = read_quiz_df(df_raw)
-                        except Exception as e:
-                            st.error(f"Error: {e}")
+                fallback_path = p.as_posix()
+                st.info(f"Auto-detected file: `{fallback_path}`")
+                if st.button("Load Auto-detected File"):
+                    try:
+                        df_raw = pd.read_excel(fallback_path)
+                        df = read_quiz_df(df_raw)
+                    except Exception as e:
+                        st.error(f"Error: {e}")
         else:
             try:
                 df_raw = pd.read_excel(uploaded_file)
@@ -432,48 +415,34 @@ with st.container(border=True):
     # Feedback Area
     if is_submitted:
         st.divider()
+        corr_let = find_correct_letter(row)
+
         if saved_ans:
             if is_correct(saved_ans, row["Correct Answer"]):
                 st.success("✅ Correct!")
+                if corr_let and f"Rationale {corr_let}" in row and pd.notna(row[f"Rationale {corr_let}"]):
+                    st.info(f"**Rationale:** {row[f'Rationale {corr_let}']}")
             else:
-                corr_let = find_correct_letter(row)
-                
                 if corr_let:
                     corr_txt = row.get(f"Option {corr_let}", str(row["Correct Answer"]))
                     st.error(f"❌ Incorrect. Correct Answer: **{corr_let}: {corr_txt}**")
                 else:
                     st.error(f"❌ Incorrect. Correct Answer: **{row['Correct Answer']}**")
                 
-                # Show rationale for wrong answer
                 selected_letter = saved_ans.split(":", 1)[0].strip().upper()
-                if "Rationale (Wrong Answers)" in row and pd.notna(row["Rationale (Wrong Answers)"]):
-                    rationale_text = str(row["Rationale (Wrong Answers)"])
-                    parts = rationale_text.split("|")
-                    found_rationale = None
-                    
-                    for part in parts:
-                        part = part.strip()
-                        if part.upper().startswith(f"OPTION {selected_letter}:"):
-                            found_rationale = part.split(":", 1)[1].strip()
-                            break
-                        elif part.startswith(f"{selected_letter}:"):
-                            found_rationale = part.split(":", 1)[1].strip()
-                            break
-                        elif part.startswith(row.get(f"Option {selected_letter}", "")):
-                            if ":" in part:
-                                found_rationale = part.split(":", 1)[1].strip()
-                                break
-                    
-                    if found_rationale:
-                        st.info(f"**Why this is wrong:** {found_rationale}")
+                
+                if selected_letter in ["A", "B", "C", "D"] and f"Rationale {selected_letter}" in row and pd.notna(row[f"Rationale {selected_letter}"]):
+                    st.warning(f"**Rationale for your choice ({selected_letter}):** {row[f'Rationale {selected_letter}']}")
+
+                if corr_let and f"Rationale {corr_let}" in row and pd.notna(row[f"Rationale {corr_let}"]):
+                    st.info(f"**Rationale for correct answer ({corr_let}):** {row[f'Rationale {corr_let}']}")
         else:
-            st.warning("⌛ Answer locked.")
-            
-            corr_let = find_correct_letter(row)
-            
+            st.warning("⌛ Answer locked (no answer submitted).")
             if corr_let:
                 corr_txt = row.get(f"Option {corr_let}", str(row["Correct Answer"]))
                 st.markdown(f"**Correct Answer:** {corr_let}: {corr_txt}")
+                if f"Rationale {corr_let}" in row and pd.notna(row[f"Rationale {corr_let}"]):
+                    st.info(f"**Rationale for correct answer ({corr_let}):** {row[f'Rationale {corr_let}']}")
             else:
                 st.markdown(f"**Correct Answer:** {row['Correct Answer']}")
 
