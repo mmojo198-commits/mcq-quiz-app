@@ -432,7 +432,7 @@ with st.container(border=True):
                 selected_letter = saved_ans.split(":", 1)[0].strip().upper()
                 
                 if selected_letter in ["A", "B", "C", "D"] and f"Rationale {selected_letter}" in row and pd.notna(row[f"Rationale {selected_letter}"]):
-                    st.warning(f"**Not Quite ({selected_letter}):** {row[f'Rationale {selected_letter}']}")
+                    st.warning(f"**Rationale for your choice ({selected_letter}):** {row[f'Rationale {selected_letter}']}")
 
                 if corr_let and f"Rationale {corr_let}" in row and pd.notna(row[f"Rationale {corr_let}"]):
                     st.info(f"**Rationale for correct answer ({corr_let}):** {row[f'Rationale {corr_let}']}")
@@ -484,4 +484,3 @@ if time_allowed is not None:
     elif not is_submitted:
         time.sleep(1.0)
         st.rerun()
-
