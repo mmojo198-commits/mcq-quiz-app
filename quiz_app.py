@@ -24,8 +24,7 @@ def extract_letter(s):
     if s_str in {"A", "B", "C", "D"}:
         return s_str
     
-    # FIXED: Removed `\s` from the character class to prevent matching sentences
-    # that start with A, B, C, or D. It now requires punctuation.
+    # Regex to find A., A), A- etc. avoiding false positives like "Apple"
     m = re.match(r"^([A-D])[\.\:\)\-]\s*", s_str)
     if m:
         return m.group(1)
@@ -63,7 +62,6 @@ def is_correct(selected, correct_raw):
     
     # If we couldn't extract a letter from correct_raw, try text matching
     if not correct_letter:
-        # Try to match by text content
         selected_text = selected.split(":", 1)[1].strip() if ":" in selected else ""
         return normalize_text(selected_text) == normalize_text(correct_raw)
     
@@ -365,8 +363,6 @@ with st.sidebar:
                      
     st.divider()
     
-    # Optional: Keep the Sidebar Finish button or remove it if it feels redundant.
-    # I'm keeping it as a fallback 'quit early' button.
     if st.button("🏁 Finish Quiz", use_container_width=True, type="secondary"):
         save_time_state()
         curr = st.session_state.get(f"radio_{i}")
@@ -448,7 +444,8 @@ with st.container(border=True):
                 st.markdown(f"**Correct Answer:** {row['Correct Answer']}")
 
     if not is_submitted:
-        if pd.notna(row.get("Hint")) and st.checkbox("Show Hint"):
+        # FIXED: Added unique key for hint to prevent it from staying open on the next question
+        if pd.notna(row.get("Hint")) and st.checkbox("Show Hint", key=f"hint_{i}"):
             st.info(f"💡 Hint: {row['Hint']}")
 
 # --- FOOTER NAV ---
@@ -484,6 +481,7 @@ with col_next:
 
 # --- AUTO-ACTION (ONLY IF TIMER EXISTS) ---
 if time_allowed is not None:
+    # Check for timeout
     if remaining is not None and remaining <= 0 and not is_submitted:
         st.session_state.time_spent[i] = time_allowed
         st.session_state.submitted_q[i] = True
@@ -494,5 +492,6 @@ if time_allowed is not None:
         time.sleep(1)
         st.rerun()
     elif not is_submitted:
+        # Refresh every second to update timer UI
         time.sleep(1.0)
         st.rerun()
