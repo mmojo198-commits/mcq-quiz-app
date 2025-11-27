@@ -6,8 +6,6 @@ from pathlib import Path
 
 st.set_page_config(page_title="MCQ Quiz", page_icon="🎯", layout="wide")
 
-LOCAL_UPLOADED_FILE_PATH = "/mnt/data/f8416257-dc87-4746-a6b6-00755d7ca1d9.png"
-
 # ---------------------------
 # Helpers
 # ---------------------------
@@ -26,9 +24,9 @@ def extract_letter(s):
     if s_str in {"A", "B", "C", "D"}:
         return s_str
     
-    # Match patterns like "A.", "A:", "A)", "A-" but NOT "A software" or "Appointed"
-    # Requires a non-alphabetic delimiter after the letter (not just any space)
-    m = re.match(r"^([A-D])[\.\:\)\-]", s_str)
+    # FIXED: Removed `\s` from the character class to prevent matching sentences
+    # that start with A, B, C, or D. It now requires punctuation.
+    m = re.match(r"^([A-D])[\.\:\)\-]\s*", s_str)
     if m:
         return m.group(1)
     
@@ -123,7 +121,8 @@ def update_score():
     sc = 0
     for idx in range(len(st.session_state.questions)):
         ans = st.session_state.answers.get(idx)
-        if ans and is_correct(ans, st.session_state.questions.iloc[idx]["Correct Answer"]):
+        q_row = st.session_state.questions.iloc[idx]
+        if ans and is_correct(ans, q_row['Correct Answer']):
             sc += 1
     st.session_state.score = sc
 
@@ -260,13 +259,13 @@ if st.session_state.finished:
     st.title("🏆 Quiz Results")
     
     total_q = len(st.session_state.questions)
-    percentage = (st.session_state.score / total_q) * 100
+    percentage = (st.session_state.score / total_q) * 100 if total_q > 0 else 0
     
     col_res1, col_res2 = st.columns([1, 3])
     with col_res1:
         st.metric("Final Score", f"{st.session_state.score} / {total_q}")
     with col_res2:
-        st.progress(st.session_state.score / total_q)
+        st.progress(st.session_state.score / total_q if total_q > 0 else 0)
         st.caption(f"Accuracy: {percentage:.1f}%")
 
     st.divider()
@@ -338,7 +337,7 @@ with st.sidebar:
         
         timer_color = "red" if remaining < 5 else "blue"
         st.markdown(f"<h1 style='text-align: center; color: {timer_color}; margin: 0;'>{int(remaining)}s</h1>", unsafe_allow_html=True)
-        st.progress(min(1.0, max(0.0, remaining / time_allowed)))
+        st.progress(min(1.0, max(0.0, remaining / time_allowed if time_allowed > 0 else 0)))
 
     st.divider()
     st.markdown("### 🗺️ Question Map")
@@ -482,5 +481,6 @@ if time_allowed is not None:
         time.sleep(1)
         st.rerun()
     elif not is_submitted:
+        # This causes a re-run every second to update the timer display
         time.sleep(1.0)
         st.rerun()
