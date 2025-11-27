@@ -159,7 +159,7 @@ def handle_navigation(new_index):
 if st.session_state.questions is None:
     st.title("📘 Interactive MCQ Quiz")
     
-    with st.container(border=True):
+    with st.container():
         st.write("### 📤 Upload Quiz Data")
         st.write("Upload an Excel file (.xlsx) with columns: `Question`, `Option A`, `Option B`, `Option C`, `Option D`, `Correct Answer`, `Hint`, and `Rationale [A-D]`")
         
@@ -200,7 +200,7 @@ if st.session_state.questions is None:
 if st.session_state.questions is not None and not st.session_state.quiz_started:
     st.title("⚙️ Quiz Setup")
     
-    with st.container(border=True):
+    with st.container():
         st.write(f"**Total Questions:** {len(st.session_state.questions)}")
         
         TIMER_OPTIONS = ["No timer", 10, 15, 20, 30, 45, 60]
@@ -384,7 +384,7 @@ main_placeholder = st.empty()
 
 with main_placeholder.container():
     # Removed 'key' argument from st.container to fix compatibility crash
-    with st.container(border=True):
+    with st.container():
         st.markdown(f"### {row['Question']}")
         
         options = [
@@ -486,7 +486,6 @@ with footer_placeholder.container():
                 st.session_state.finished = True
                 st.rerun()
 
-
 # --- AUTO-ACTION (ONLY IF TIMER EXISTS) ---
 if time_allowed is not None:
     # Check for timeout
@@ -503,4 +502,3 @@ if time_allowed is not None:
         # Refresh every second to update timer UI
         time.sleep(1.0)
         st.rerun()
-
