@@ -479,4 +479,12 @@ with col_next:
             st.rerun()
 
 # ==========================================
-# ⚡ TIMER LOOP (Bottom of
+# ⚡ TIMER LOOP (Bottom of script)
+# ==========================================
+# Only run the sleep/rerun loop if:
+# 1. Timer is active
+# 2. Question is NOT submitted (if submitted, time stops, no need to refresh)
+# 3. Time is remaining
+if time_allowed is not None and not is_submitted and remaining > 0:
+    time.sleep(1.0)
+    st.rerun()
