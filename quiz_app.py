@@ -140,6 +140,7 @@ def handle_navigation(new_index):
     else:
         st.session_state.show_feedback_for = None
     
+    # Force stop to prevent any UI bleed
     st.rerun()
 
 # ---------------------------
@@ -357,6 +358,10 @@ with st.sidebar:
 st.markdown(f"#### Question {i + 1} of {total_q}")
 st.progress((i) / total_q)
 
+# DEBUG: Check state
+st.write(f"DEBUG: Current i={i}, is_submitted={is_submitted}, show_feedback_for={st.session_state.show_feedback_for}")
+st.write(f"DEBUG: submitted_q={st.session_state.submitted_q}")
+
 with st.container(border=True):
     st.markdown(f"### {row['Question']}")
     
@@ -388,15 +393,11 @@ with st.container(border=True):
         key=f"selected_option_{i}",
         disabled=is_submitted
     )
-    
-    # Show hint inside the question container if not submitted
-    if not is_submitted:
-        if pd.notna(row.get("Hint")) and st.checkbox("Show Hint", key=f"hint_check_{i}"):
-            st.info(f"💡 Hint: {row['Hint']}")
 
-# Feedback Area - render OUTSIDE the question container
+# Feedback Area - render OUTSIDE the container and ONLY for current submitted question
 if is_submitted and st.session_state.show_feedback_for == i:
     with st.container(border=True):
+        st.divider()
         corr_let = find_correct_letter(row)
         submitted_answer = st.session_state.answers.get(i)
         
@@ -427,17 +428,21 @@ if is_submitted and st.session_state.show_feedback_for == i:
                     st.info(f"**Rationale for correct answer ({corr_let}):** {row[f'Rationale {corr_let}']}")
             else:
                 st.markdown(f"**Correct Answer:** {row['Correct Answer']}")
+    
+if not is_submitted:
+    if pd.notna(row.get("Hint")) and st.checkbox("Show Hint"):
+        st.info(f"💡 Hint: {row['Hint']}")
 
 # --- FOOTER NAV ---
-col_prev, col_submit, col_next = st.columns([1, 2, 1], gap="small")
+col_prev, col_submit, col_next = st.columns([1, 2, 1])
 
 with col_prev:
-    if st.button("⬅️ Previous", disabled=(i == 0), use_container_width=True, key=f"btn_prev_{i}"):
+    if st.button("⬅️ Previous", disabled=(i == 0), use_container_width=True):
         handle_navigation(i - 1)
 
 with col_submit:
     if not is_submitted:
-        if st.button("🔒 Submit Answer", type="primary", use_container_width=True, key=f"btn_submit_{i}"):
+        if st.button("🔒 Submit Answer", type="primary", use_container_width=True):
             save_time_state()
             st.session_state.answers[i] = selected
             st.session_state.submitted_q[i] = True
@@ -447,10 +452,10 @@ with col_submit:
 
 with col_next:
     if i < total_q - 1:
-        if st.button("Next ➡️", use_container_width=True, key=f"btn_next_{i}"):
+        if st.button("Next ➡️", use_container_width=True):
             handle_navigation(i + 1)
     else:
-        if st.button("🏁 Finish Quiz", type="primary", use_container_width=True, key=f"btn_finish_{i}"):
+        if st.button("🏁 Finish Quiz", type="primary", use_container_width=True):
             save_time_state()
             curr = st.session_state.get(f"selected_option_{i}")
             if not is_submitted:
