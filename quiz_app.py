@@ -130,12 +130,15 @@ def handle_navigation(new_index):
     if not st.session_state.submitted_q.get(i, False):
         st.session_state.answers[i] = current_selected
     
-    # Clear feedback flag on navigation
-    st.session_state.show_feedback_for = None
-    
     # Update pointer
     st.session_state.index = new_index
     st.session_state.question_start_time = time.time()
+    
+    # Set feedback flag if navigating to a submitted question
+    if st.session_state.submitted_q.get(new_index, False):
+        st.session_state.show_feedback_for = new_index
+    else:
+        st.session_state.show_feedback_for = None
     
     # Force stop to prevent any UI bleed
     st.rerun()
