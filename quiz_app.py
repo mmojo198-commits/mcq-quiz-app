@@ -430,9 +430,6 @@ if is_submitted and st.session_state.show_feedback_for == i:
             else:
                 st.markdown(f"**Correct Answer:** {row['Correct Answer']}")
 
-if not is_submitted:
-    pass  # Hint is now inside the question container
-
 # --- FOOTER NAV ---
 col_prev, col_submit, col_next = st.columns([1, 2, 1])
 
