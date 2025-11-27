@@ -153,7 +153,6 @@ def handle_navigation(new_index):
     # Update pointer
     st.session_state.index = new_index
     st.session_state.question_start_time = time.time()
-    st.session_state.just_navigated = True
     st.rerun()
 
 # ---------------------------
@@ -497,4 +496,3 @@ if time_allowed is not None:
     elif not is_submitted:
         time.sleep(1.0)
         st.rerun()
-
