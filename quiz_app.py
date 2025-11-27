@@ -420,6 +420,7 @@ if is_submitted and st.session_state.show_feedback_for == i:
         submitted_answer = st.session_state.answers.get(i)
         
         if submitted_answer:
+            # CASE 1: User submitted an answer
             if is_correct(submitted_answer, row["Correct Answer"]):
                 st.success("✅ Correct!")
                 if corr_let and f"Rationale {corr_let}" in row and pd.notna(row[f"Rationale {corr_let}"]):
@@ -438,21 +439,17 @@ if is_submitted and st.session_state.show_feedback_for == i:
                 if corr_let and f"Rationale {corr_let}" in row and pd.notna(row[f"Rationale {corr_let}"]):
                     st.info(f"**Rationale for correct answer ({corr_let}):** {row[f'Rationale {corr_let}']}")
         else:
+            # CASE 2: No answer submitted (Timeout or Skipped)
             st.warning("⌛ Answer locked (no answer submitted).")
             if corr_let:
                 corr_txt = row.get(f"Option {corr_let}", str(row["Correct Answer"]))
                 st.markdown(f"**Correct Answer:** {corr_let}: {corr_txt}")
             else:
                 st.markdown(f"**Correct Answer:** {row['Correct Answer']}")
-    
-if not is_submitted:
-    if pd.notna(row.get("Hint")):
-        # Use on_change callback to mark hint interaction
-        def mark_hint_interaction():
-            st.session_state.hint_interaction = True
-        
-        if st.checkbox("Show Hint", key=f"hint_{i}", on_change=mark_hint_interaction):
-            st.info(f"💡 Hint: {row['Hint']}")
+
+            # --- FIX ADDED HERE: Show rationale even if no answer was submitted ---
+            if corr_let and f"Rationale {corr_let}" in row and pd.notna(row[f"Rationale {corr_let}"]):
+                st.info(f"**Rationale:** {row[f'Rationale {corr_let}']}")
 
 # --- FOOTER NAV ---
 col_prev, col_submit, col_next = st.columns([1, 2, 1])
@@ -497,3 +494,4 @@ with col_next:
 if time_allowed is not None and not is_submitted and remaining > 0 and not st.session_state.hint_interaction:
     time.sleep(1.0)
     st.rerun()
+
