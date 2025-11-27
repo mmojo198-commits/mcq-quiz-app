@@ -375,8 +375,6 @@ with st.sidebar:
         st.rerun()
 
 # --- MAIN CONTENT AREA (Safe from duplicates) ---
-# We use a single st.empty() container to render EVERYTHING in the main area.
-# This forces a complete wipe of the previous question's UI before drawing the new one.
 main_placeholder = st.empty()
 
 with main_placeholder.container():
@@ -471,11 +469,8 @@ with main_placeholder.container():
         if i < total_q - 1:
             if st.button("Next ➡️", use_container_width=True, key=f"next_{i}"):
                 handle_navigation(i + 1)
-    else:
-        # "Else" here refers to the "if i < total_q - 1" check, essentially "if this is the last question"
-        # We check logic again to be safe because indenting can be tricky
-        if i == total_q - 1: 
-             if st.button("🏁 Finish Quiz", type="primary", use_container_width=True, key=f"finish_{i}"):
+        else:
+            if st.button("🏁 Finish Quiz", type="primary", use_container_width=True, key=f"finish_{i}"):
                 save_time_state()
                 curr = st.session_state.get(f"radio_{i}")
                 if not is_submitted:
