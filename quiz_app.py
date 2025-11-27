@@ -390,10 +390,10 @@ with st.container(border=True):
         key=f"selected_option_{i}",
         disabled=is_submitted
     )
-    
-    # Only show feedback if submitted AND not in a transition state
-    # Check that the current index matches expectations
-    if is_submitted and st.session_state.show_feedback_for == i and st.session_state.index == i:
+
+# Feedback Area - render OUTSIDE the container and ONLY for current submitted question
+if is_submitted and st.session_state.show_feedback_for == i:
+    with st.container(border=True):
         st.divider()
         corr_let = find_correct_letter(row)
         submitted_answer = st.session_state.answers.get(i)
@@ -426,9 +426,9 @@ with st.container(border=True):
             else:
                 st.markdown(f"**Correct Answer:** {row['Correct Answer']}")
     
-    if not is_submitted:
-        if pd.notna(row.get("Hint")) and st.checkbox("Show Hint"):
-            st.info(f"💡 Hint: {row['Hint']}")
+if not is_submitted:
+    if pd.notna(row.get("Hint")) and st.checkbox("Show Hint"):
+        st.info(f"💡 Hint: {row['Hint']}")
 
 # --- FOOTER NAV ---
 col_prev, col_submit, col_next = st.columns([1, 2, 1])
