@@ -147,10 +147,6 @@ def handle_navigation(new_index):
     current_selected = st.session_state.get(f"radio_{i}")
     if not st.session_state.submitted_q.get(i, False):
         st.session_state.answers[i] = current_selected
-        
-    # Clear the radio widget for the NEW question to prevent state bleed
-    if f"radio_{new_index}" in st.session_state:
-        del st.session_state[f"radio_{new_index}"]
     
     # Update pointer
     st.session_state.index = new_index
@@ -367,7 +363,7 @@ with st.sidebar:
                      
     st.divider()
     
-    if st.button("🏁 Finish Quiz", use_container_width=True, type="secondary"):
+    if st.button("🏁 Finish Quiz", key="sidebar_finish", use_container_width=True, type="secondary"):
         save_time_state()
         curr = st.session_state.get(f"radio_{i}")
         if not is_submitted:
@@ -448,20 +444,23 @@ with st.container(border=True):
                 st.markdown(f"**Correct Answer:** {row['Correct Answer']}")
 
     if not is_submitted:
-        # FIXED: Added unique key for hint to prevent it from staying open on the next question
+        # Added key=f"hint_{i}" to ensure hint state doesn't leak to next question
         if pd.notna(row.get("Hint")) and st.checkbox("Show Hint", key=f"hint_{i}"):
             st.info(f"💡 Hint: {row['Hint']}")
 
 # --- FOOTER NAV ---
 col_prev, col_submit, col_next = st.columns([1, 2, 1])
 
+# Added unique keys (e.g., f"prev_{i}") to all footer buttons to prevents ghost clicks
+# and state carry-over when the timer forces a re-run.
+
 with col_prev:
-    if st.button("⬅️ Previous", disabled=(i == 0), use_container_width=True):
+    if st.button("⬅️ Previous", disabled=(i == 0), use_container_width=True, key=f"prev_{i}"):
         handle_navigation(i - 1)
 
 with col_submit:
     if not is_submitted:
-        if st.button("🔒 Submit Answer", type="primary", use_container_width=True):
+        if st.button("🔒 Submit Answer", type="primary", use_container_width=True, key=f"submit_{i}"):
             save_time_state()
             st.session_state.answers[i] = selected
             st.session_state.submitted_q[i] = True
@@ -470,10 +469,10 @@ with col_submit:
 
 with col_next:
     if i < total_q - 1:
-        if st.button("Next ➡️", use_container_width=True):
+        if st.button("Next ➡️", use_container_width=True, key=f"next_{i}"):
             handle_navigation(i + 1)
     else:
-        if st.button("🏁 Finish Quiz", type="primary", use_container_width=True):
+        if st.button("🏁 Finish Quiz", type="primary", use_container_width=True, key=f"finish_{i}"):
             save_time_state()
             curr = st.session_state.get(f"radio_{i}")
             if not is_submitted:
@@ -499,4 +498,3 @@ if time_allowed is not None:
         # Refresh every second to update timer UI
         time.sleep(1.0)
         st.rerun()
-
