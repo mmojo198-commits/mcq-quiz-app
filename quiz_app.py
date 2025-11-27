@@ -140,7 +140,6 @@ def handle_navigation(new_index):
     else:
         st.session_state.show_feedback_for = None
     
-    # Force stop to prevent any UI bleed
     st.rerun()
 
 # ---------------------------
@@ -395,10 +394,9 @@ with st.container(border=True):
         if pd.notna(row.get("Hint")) and st.checkbox("Show Hint", key=f"hint_check_{i}"):
             st.info(f"💡 Hint: {row['Hint']}")
 
-# Feedback Area - render OUTSIDE the container and ONLY for current submitted question
+# Feedback Area - render OUTSIDE the question container
 if is_submitted and st.session_state.show_feedback_for == i:
     with st.container(border=True):
-        st.divider()
         corr_let = find_correct_letter(row)
         submitted_answer = st.session_state.answers.get(i)
         
