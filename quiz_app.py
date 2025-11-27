@@ -158,9 +158,11 @@ def handle_navigation(new_index):
     # Increment navigation counter to force new radio widgets
     st.session_state.nav_counter = st.session_state.get('nav_counter', 0) + 1
     
-    # Update pointer
+    # Update pointer FIRST before rerun
     st.session_state.index = new_index
     st.session_state.question_start_time = time.time()
+    
+    # Force immediate rerun to prevent any UI bleed
     st.rerun()
 
 # ---------------------------
@@ -504,5 +506,6 @@ if time_allowed is not None:
     elif not is_submitted:
         time.sleep(1.0)
         st.rerun()
+
 
 
