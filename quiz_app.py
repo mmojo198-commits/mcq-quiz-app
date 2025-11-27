@@ -365,7 +365,9 @@ with st.sidebar:
                      
     st.divider()
     
-    if st.button("🏁 Finish Quiz", use_container_width=True, type="primary" if i == total_q - 1 else "secondary"):
+    # Optional: Keep the Sidebar Finish button or remove it if it feels redundant.
+    # I'm keeping it as a fallback 'quit early' button.
+    if st.button("🏁 Finish Quiz", use_container_width=True, type="secondary"):
         save_time_state()
         curr = st.session_state.get(f"radio_{i}")
         if not is_submitted:
@@ -466,8 +468,19 @@ with col_submit:
             st.rerun()
 
 with col_next:
-    if st.button("Next ➡️", disabled=(i == total_q - 1), use_container_width=True):
-        handle_navigation(i + 1)
+    if i < total_q - 1:
+        if st.button("Next ➡️", use_container_width=True):
+            handle_navigation(i + 1)
+    else:
+        if st.button("🏁 Finish Quiz", type="primary", use_container_width=True):
+            save_time_state()
+            curr = st.session_state.get(f"radio_{i}")
+            if not is_submitted:
+                st.session_state.answers[i] = curr
+                st.session_state.submitted_q[i] = True
+            update_score()
+            st.session_state.finished = True
+            st.rerun()
 
 # --- AUTO-ACTION (ONLY IF TIMER EXISTS) ---
 if time_allowed is not None:
@@ -481,6 +494,5 @@ if time_allowed is not None:
         time.sleep(1)
         st.rerun()
     elif not is_submitted:
-        # This causes a re-run every second to update the timer display
         time.sleep(1.0)
         st.rerun()
