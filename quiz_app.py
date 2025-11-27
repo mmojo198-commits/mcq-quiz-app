@@ -358,10 +358,6 @@ with st.sidebar:
 st.markdown(f"#### Question {i + 1} of {total_q}")
 st.progress((i) / total_q)
 
-# DEBUG: Check state
-st.write(f"DEBUG: Current i={i}, is_submitted={is_submitted}, show_feedback_for={st.session_state.show_feedback_for}")
-st.write(f"DEBUG: submitted_q={st.session_state.submitted_q}")
-
 with st.container(border=True):
     st.markdown(f"### {row['Question']}")
     
@@ -393,6 +389,11 @@ with st.container(border=True):
         key=f"selected_option_{i}",
         disabled=is_submitted
     )
+    
+    # Show hint inside the question container if not submitted
+    if not is_submitted:
+        if pd.notna(row.get("Hint")) and st.checkbox("Show Hint", key=f"hint_check_{i}"):
+            st.info(f"💡 Hint: {row['Hint']}")
 
 # Feedback Area - render OUTSIDE the container and ONLY for current submitted question
 if is_submitted and st.session_state.show_feedback_for == i:
@@ -428,10 +429,9 @@ if is_submitted and st.session_state.show_feedback_for == i:
                     st.info(f"**Rationale for correct answer ({corr_let}):** {row[f'Rationale {corr_let}']}")
             else:
                 st.markdown(f"**Correct Answer:** {row['Correct Answer']}")
-    
+
 if not is_submitted:
-    if pd.notna(row.get("Hint")) and st.checkbox("Show Hint"):
-        st.info(f"💡 Hint: {row['Hint']}")
+    pass  # Hint is now inside the question container
 
 # --- FOOTER NAV ---
 col_prev, col_submit, col_next = st.columns([1, 2, 1])
