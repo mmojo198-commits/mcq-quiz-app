@@ -146,9 +146,14 @@ def handle_navigation(new_index):
     save_time_state()
     
     # Save answer if not already submitted (auto-save draft)
-    current_selected = st.session_state.get(f"radio_{i}")
+    # Use the current radio key
+    current_radio_key = f"radio_{i}_{st.session_state.get('nav_counter', 0)}"
+    current_selected = st.session_state.get(current_radio_key)
     if not st.session_state.submitted_q.get(i, False):
         st.session_state.answers[i] = current_selected
+    
+    # Increment navigation counter to force new radio widgets
+    st.session_state.nav_counter = st.session_state.get('nav_counter', 0) + 1
     
     # Update pointer
     st.session_state.index = new_index
@@ -496,3 +501,4 @@ if time_allowed is not None:
     elif not is_submitted:
         time.sleep(1.0)
         st.rerun()
+
