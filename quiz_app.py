@@ -358,10 +358,6 @@ with st.sidebar:
 st.markdown(f"#### Question {i + 1} of {total_q}")
 st.progress((i) / total_q)
 
-# DEBUG: Check state
-st.write(f"DEBUG: Current i={i}, is_submitted={is_submitted}, show_feedback_for={st.session_state.show_feedback_for}")
-st.write(f"DEBUG: submitted_q={st.session_state.submitted_q}")
-
 with st.container(border=True):
     st.markdown(f"### {row['Question']}")
     
@@ -480,3 +476,4 @@ if time_allowed is not None and not is_submitted:
     else:
         time.sleep(1.0)
         st.rerun()
+
