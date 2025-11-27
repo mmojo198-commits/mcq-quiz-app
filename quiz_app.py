@@ -26,9 +26,9 @@ def extract_letter(s):
     if s_str in {"A", "B", "C", "D"}:
         return s_str
     
-    # Match patterns like "A.", "A:", "A)", "A-", "A " but NOT "Appointed"
-    # Requires at least ONE delimiter/space after the letter
-    m = re.match(r"^([A-D])[\.\:\)\-\s]", s_str)
+    # Match patterns like "A.", "A:", "A)", "A-" but NOT "A software" or "Appointed"
+    # Requires a non-alphabetic delimiter after the letter (not just any space)
+    m = re.match(r"^([A-D])[\.\:\)\-]", s_str)
     if m:
         return m.group(1)
     
@@ -484,4 +484,3 @@ if time_allowed is not None:
     elif not is_submitted:
         time.sleep(1.0)
         st.rerun()
-
