@@ -390,7 +390,10 @@ with st.container(border=True):
         disabled=is_submitted
     )
 
-# Feedback Area - render OUTSIDE the container and ONLY for current submitted question
+# -------------------------------
+# FEEDBACK AREA (Only after submit)
+# -------------------------------
+
 if is_submitted and st.session_state.show_feedback_for == i:
     with st.container(border=True):
         st.divider()
@@ -398,10 +401,17 @@ if is_submitted and st.session_state.show_feedback_for == i:
         submitted_answer = st.session_state.answers.get(i)
         
         if submitted_answer:
+            # Correct
             if is_correct(submitted_answer, row["Correct Answer"]):
                 st.success("✅ Correct!")
-                if corr_let and f"Rationale {corr_let}" in row and pd.notna(row[f"Rationale {corr_let}"]):
+                if (
+                    corr_let
+                    and f"Rationale {corr_let}" in row
+                    and pd.notna(row[f"Rationale {corr_let}"])
+                ):
                     st.info(f"**Rationale:** {row[f'Rationale {corr_let}']}")
+            
+            # Incorrect
             else:
                 if corr_let:
                     corr_txt = row.get(f"Option {corr_let}", str(row["Correct Answer"]))
@@ -409,25 +419,62 @@ if is_submitted and st.session_state.show_feedback_for == i:
                 else:
                     st.error(f"❌ Incorrect. Correct Answer: **{row['Correct Answer']}**")
                 
+                # Show rationale for chosen wrong option
                 selected_letter = submitted_answer.split(":", 1)[0].strip().upper()
-                if selected_letter in ["A", "B", "C", "D"] and f"Rationale {selected_letter}" in row and pd.notna(row[f"Rationale {selected_letter}"]):
-                    st.warning(f"**Not Quite ({selected_letter}):** {row[f'Rationale {selected_letter}']}")
+                if (
+                    selected_letter in ["A", "B", "C", "D"]
+                    and f"Rationale {selected_letter}" in row
+                    and pd.notna(row[f"Rationale {selected_letter}"])
+                ):
+                    st.warning(
+                        f"**Not Quite ({selected_letter}):** "
+                        f"{row[f'Rationale {selected_letter}']}"
+                    )
                 
-                if corr_let and f"Rationale {corr_let}" in row and pd.notna(row[f"Rationale {corr_let}"]):
-                    st.info(f"**Rationale for correct answer ({corr_let}):** {row[f'Rationale {corr_let}']}")
+                # Show correct rationale
+                if (
+                    corr_let
+                    and f"Rationale {corr_let}" in row
+                    and pd.notna(row[f"Rationale {corr_let}"])
+                ):
+                    st.info(
+                        f"**Rationale for correct answer ({corr_let}):** "
+                        f"{row[f'Rationale {corr_let}']}"
+                    )
+
         else:
+            # No submitted answer
             st.warning("⌛ Answer locked (no answer submitted).")
             if corr_let:
                 corr_txt = row.get(f"Option {corr_let}", str(row["Correct Answer"]))
                 st.markdown(f"**Correct Answer:** {corr_let}: {corr_txt}")
-                if f"Rationale {corr_let}" in row and pd.notna(row[f"Rationale {corr_let}"]):
-                    st.info(f"**Rationale for correct answer ({corr_let}):** {row[f'Rationale {corr_let}']}")
+                if (
+                    f"Rationale {corr_let}" in row
+                    and pd.notna(row[f"Rationale {corr_let}"])
+                ):
+                    st.info(
+                        f"**Rationale for correct answer ({corr_let}):** "
+                        f"{row[f'Rationale {corr_let}']}"
+                    )
             else:
                 st.markdown(f"**Correct Answer:** {row['Correct Answer']}")
-    
-if not is_submitted:
-    if pd.notna(row.get("Hint")) and st.checkbox("Show Hint"):
-        st.info(f"💡 Hint: {row['Hint']}")
+
+
+
+# -------------------------------
+# HINT AREA (Only before submit)
+# -------------------------------
+
+if not is_submitted and pd.notna(row.get("Hint")):
+
+    # Unique key per question prevents hint leaking to next question
+    hint_key = f"hint_{i}"
+
+    with st.container():   # prevents layout jumps
+        show_hint = st.checkbox("Show Hint", key=hint_key)
+
+        if show_hint:
+            st.info(f"💡 Hint: {row['Hint']}")
 
 # --- FOOTER NAV ---
 col_prev, col_submit, col_next = st.columns([1, 2, 1])
@@ -476,4 +523,5 @@ if time_allowed is not None and not is_submitted:
     else:
         time.sleep(1.0)
         st.rerun()
+
 
