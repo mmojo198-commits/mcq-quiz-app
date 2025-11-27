@@ -136,6 +136,8 @@ def handle_navigation(new_index):
     # Update pointer
     st.session_state.index = new_index
     st.session_state.question_start_time = time.time()
+    
+    # Force stop to prevent any UI bleed
     st.rerun()
 
 # ---------------------------
@@ -353,6 +355,10 @@ with st.sidebar:
 st.markdown(f"#### Question {i + 1} of {total_q}")
 st.progress((i) / total_q)
 
+# DEBUG: Check state
+st.write(f"DEBUG: Current i={i}, is_submitted={is_submitted}, show_feedback_for={st.session_state.show_feedback_for}")
+st.write(f"DEBUG: submitted_q={st.session_state.submitted_q}")
+
 with st.container(border=True):
     st.markdown(f"### {row['Question']}")
     
@@ -385,11 +391,9 @@ with st.container(border=True):
         disabled=is_submitted
     )
     
-    # Feedback Area - ONLY show if THIS question is submitted AND feedback is enabled for it
-    # Use explicit flag to prevent bleed during timer reruns
-    can_show_feedback = is_submitted and (st.session_state.show_feedback_for == i)
-    
-    if can_show_feedback:
+    # Only show feedback if submitted AND not in a transition state
+    # Check that the current index matches expectations
+    if is_submitted and st.session_state.show_feedback_for == i and st.session_state.index == i:
         st.divider()
         corr_let = find_correct_letter(row)
         submitted_answer = st.session_state.answers.get(i)
