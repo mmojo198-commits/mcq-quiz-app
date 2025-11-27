@@ -113,6 +113,9 @@ if "finished" not in st.session_state:
     st.session_state.finished = False
 if "score" not in st.session_state:
     st.session_state.score = 0
+# Create a placeholder for the main content to control re-rendering
+if "main_content_placeholder" not in st.session_state:
+    st.session_state.main_content_placeholder = None
 
 def update_score():
     """Calculate and update the current score."""
@@ -256,6 +259,7 @@ if st.session_state.questions is not None and not st.session_state.quiz_started:
 # State 3: Results
 # ---------------------------
 if st.session_state.finished:
+    # We don't need the placeholder logic here, as we are stopping the quiz state
     st.title("🏆 Quiz Results")
     
     total_q = len(st.session_state.questions)
@@ -360,6 +364,9 @@ with st.sidebar:
                     else:
                         lbl = f"✗ {q_idx+1}"
                 
+                # Check the state of the button before rendering
+                is_current = (q_idx == i)
+                # Use a unique key for the button itself
                 if st.button(lbl, key=f"nav_{q_idx}", use_container_width=True, type=btn_type):
                     handle_navigation(q_idx)
                     
@@ -376,11 +383,17 @@ with st.sidebar:
         st.session_state.finished = True
         st.rerun()
 
-# --- MAIN CONTENT ---
-# FIX: Wrap main content in a container with a unique key based on the question index (i)
-# This forces Streamlit to re-draw the entire content block on navigation, preventing 
-# visual artifacts from the previous question from lingering during the timer-driven re-runs.
-with st.container(key=f"main_quiz_content_{i}"):
+# --- MAIN CONTENT PLACEHOLDER LOGIC ---
+# Create the placeholder on the first run, or retrieve it
+if st.session_state.main_content_placeholder is None:
+    st.session_state.main_content_placeholder = st.empty()
+
+# Clear the placeholder to ensure no previous elements linger
+placeholder = st.session_state.main_content_placeholder
+placeholder.empty()
+
+# Render all of the question content inside the placeholder
+with placeholder.container():
     st.markdown(f"#### Question {i + 1} of {total_q}")
     st.progress((i) / total_q)
 
@@ -407,6 +420,7 @@ with st.container(key=f"main_quiz_content_{i}"):
             elif saved_ans in display_options:
                 radio_idx = display_options.index(saved_ans)
                 
+        # This radio button key MUST be unique per question index
         selected = st.radio(
             "Select your answer:", 
             display_options, 
@@ -454,39 +468,36 @@ with st.container(key=f"main_quiz_content_{i}"):
             if pd.notna(row.get("Hint")) and st.checkbox("Show Hint", key=f"hint_{i}"):
                 st.info(f"💡 Hint: {row['Hint']}")
 
-# --- FOOTER NAV ---
-col_prev, col_submit, col_next = st.columns([1, 2, 1])
+    # --- FOOTER NAV (Rendered inside the placeholder to ensure it's cleared) ---
+    col_prev, col_submit, col_next = st.columns([1, 2, 1])
 
-# Added unique keys (e.g., f"prev_{i}") to all footer buttons to prevents ghost clicks
-# and state carry-over when the timer forces a re-run.
+    with col_prev:
+        if st.button("⬅️ Previous", disabled=(i == 0), use_container_width=True, key=f"prev_{i}"):
+            handle_navigation(i - 1)
 
-with col_prev:
-    if st.button("⬅️ Previous", disabled=(i == 0), use_container_width=True, key=f"prev_{i}"):
-        handle_navigation(i - 1)
-
-with col_submit:
-    if not is_submitted:
-        if st.button("🔒 Submit Answer", type="primary", use_container_width=True, key=f"submit_{i}"):
-            save_time_state()
-            st.session_state.answers[i] = selected
-            st.session_state.submitted_q[i] = True
-            update_score()
-            st.rerun()
-
-with col_next:
-    if i < total_q - 1:
-        if st.button("Next ➡️", use_container_width=True, key=f"next_{i}"):
-            handle_navigation(i + 1)
-    else:
-        if st.button("🏁 Finish Quiz", type="primary", use_container_width=True, key=f"finish_{i}"):
-            save_time_state()
-            curr = st.session_state.get(f"radio_{i}")
-            if not is_submitted:
-                st.session_state.answers[i] = curr
+    with col_submit:
+        if not is_submitted:
+            if st.button("🔒 Submit Answer", type="primary", use_container_width=True, key=f"submit_{i}"):
+                save_time_state()
+                st.session_state.answers[i] = selected
                 st.session_state.submitted_q[i] = True
-            update_score()
-            st.session_state.finished = True
-            st.rerun()
+                update_score()
+                st.rerun()
+
+    with col_next:
+        if i < total_q - 1:
+            if st.button("Next ➡️", use_container_width=True, key=f"next_{i}"):
+                handle_navigation(i + 1)
+        else:
+            if st.button("🏁 Finish Quiz", type="primary", use_container_width=True, key=f"finish_{i}"):
+                save_time_state()
+                curr = st.session_state.get(f"radio_{i}")
+                if not is_submitted:
+                    st.session_state.answers[i] = curr
+                    st.session_state.submitted_q[i] = True
+                update_score()
+                st.session_state.finished = True
+                st.rerun()
 
 # --- AUTO-ACTION (ONLY IF TIMER EXISTS) ---
 if time_allowed is not None:
@@ -497,7 +508,9 @@ if time_allowed is not None:
         current_selection = st.session_state.get(f"radio_{i}")
         st.session_state.answers[i] = current_selection
         update_score()
-        st.warning("⏰ Time's Up!")
+        # NOTE: Do not use st.warning here, use placeholder to display timeout message temporarily
+        # st.warning("⏰ Time's Up!") 
+        # Rerunning directly will handle the feedback display
         time.sleep(1)
         st.rerun()
     elif not is_submitted:
