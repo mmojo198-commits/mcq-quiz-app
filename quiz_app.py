@@ -429,15 +429,15 @@ if is_submitted and st.session_state.show_feedback_for == i:
                 st.markdown(f"**Correct Answer:** {row['Correct Answer']}")
 
 # --- FOOTER NAV ---
-col_prev, col_submit, col_next = st.columns([1, 2, 1])
+col_prev, col_submit, col_next = st.columns([1, 2, 1], gap="small")
 
 with col_prev:
-    if st.button("⬅️ Previous", disabled=(i == 0), use_container_width=True):
+    if st.button("⬅️ Previous", disabled=(i == 0), use_container_width=True, key=f"btn_prev_{i}"):
         handle_navigation(i - 1)
 
 with col_submit:
     if not is_submitted:
-        if st.button("🔒 Submit Answer", type="primary", use_container_width=True):
+        if st.button("🔒 Submit Answer", type="primary", use_container_width=True, key=f"btn_submit_{i}"):
             save_time_state()
             st.session_state.answers[i] = selected
             st.session_state.submitted_q[i] = True
@@ -447,10 +447,10 @@ with col_submit:
 
 with col_next:
     if i < total_q - 1:
-        if st.button("Next ➡️", use_container_width=True):
+        if st.button("Next ➡️", use_container_width=True, key=f"btn_next_{i}"):
             handle_navigation(i + 1)
     else:
-        if st.button("🏁 Finish Quiz", type="primary", use_container_width=True):
+        if st.button("🏁 Finish Quiz", type="primary", use_container_width=True, key=f"btn_finish_{i}"):
             save_time_state()
             curr = st.session_state.get(f"selected_option_{i}")
             if not is_submitted:
