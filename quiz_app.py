@@ -94,6 +94,8 @@ if "finished" not in st.session_state:
     st.session_state.finished = False
 if "score" not in st.session_state:
     st.session_state.score = 0
+if "show_feedback_for" not in st.session_state:
+    st.session_state.show_feedback_for = None
 
 def update_score():
     """Calculate and update the current score."""
@@ -127,6 +129,9 @@ def handle_navigation(new_index):
     current_selected = st.session_state.get(f"selected_option_{i}")
     if not st.session_state.submitted_q.get(i, False):
         st.session_state.answers[i] = current_selected
+    
+    # Clear feedback flag on navigation
+    st.session_state.show_feedback_for = None
     
     # Update pointer
     st.session_state.index = new_index
@@ -380,8 +385,11 @@ with st.container(border=True):
         disabled=is_submitted
     )
     
-    # Feedback Area - ONLY show if THIS question is submitted
-    if is_submitted:
+    # Feedback Area - ONLY show if THIS question is submitted AND feedback is enabled for it
+    # Use explicit flag to prevent bleed during timer reruns
+    can_show_feedback = is_submitted and (st.session_state.show_feedback_for == i)
+    
+    if can_show_feedback:
         st.divider()
         corr_let = find_correct_letter(row)
         submitted_answer = st.session_state.answers.get(i)
@@ -431,6 +439,7 @@ with col_submit:
             save_time_state()
             st.session_state.answers[i] = selected
             st.session_state.submitted_q[i] = True
+            st.session_state.show_feedback_for = i
             update_score()
             st.rerun()
 
@@ -454,6 +463,7 @@ if time_allowed is not None and not is_submitted:
     if remaining is not None and remaining <= 0:
         st.session_state.time_spent[i] = time_allowed
         st.session_state.submitted_q[i] = True
+        st.session_state.show_feedback_for = i
         current_selection = st.session_state.get(f"selected_option_{i}")
         st.session_state.answers[i] = current_selection
         update_score()
