@@ -24,7 +24,8 @@ def extract_letter(s):
     if s_str in {"A", "B", "C", "D"}:
         return s_str
     
-    # Regex to find A., A), A- etc. avoiding false positives like "Apple"
+    # FIXED: Removed `\s` from the character class to prevent matching sentences
+    # that start with A, B, C, or D. It now requires punctuation.
     m = re.match(r"^([A-D])[\.\:\)\-]\s*", s_str)
     if m:
         return m.group(1)
@@ -62,6 +63,7 @@ def is_correct(selected, correct_raw):
     
     # If we couldn't extract a letter from correct_raw, try text matching
     if not correct_letter:
+        # Try to match by text content
         selected_text = selected.split(":", 1)[1].strip() if ":" in selected else ""
         return normalize_text(selected_text) == normalize_text(correct_raw)
     
@@ -113,9 +115,6 @@ if "finished" not in st.session_state:
     st.session_state.finished = False
 if "score" not in st.session_state:
     st.session_state.score = 0
-# Create a placeholder for the main content to control re-rendering
-if "main_content_placeholder" not in st.session_state:
-    st.session_state.main_content_placeholder = None
 
 def update_score():
     """Calculate and update the current score."""
@@ -181,8 +180,6 @@ if st.session_state.questions is None:
                         df = read_quiz_df(df_raw)
                     except Exception as e:
                         st.error(f"Error: {e}")
-            else:
-                pass # No fallback available, let user upload
         else:
             try:
                 df_raw = pd.read_excel(uploaded_file)
@@ -259,7 +256,6 @@ if st.session_state.questions is not None and not st.session_state.quiz_started:
 # State 3: Results
 # ---------------------------
 if st.session_state.finished:
-    # We don't need the placeholder logic here, as we are stopping the quiz state
     st.title("🏆 Quiz Results")
     
     total_q = len(st.session_state.questions)
@@ -364,15 +360,14 @@ with st.sidebar:
                     else:
                         lbl = f"✗ {q_idx+1}"
                 
-                # Check the state of the button before rendering
-                is_current = (q_idx == i)
-                # Use a unique key for the button itself
                 if st.button(lbl, key=f"nav_{q_idx}", use_container_width=True, type=btn_type):
                     handle_navigation(q_idx)
-                    
+                     
     st.divider()
     
-    if st.button("🏁 Finish Quiz", key="sidebar_finish", use_container_width=True, type="secondary"):
+    # Optional: Keep the Sidebar Finish button or remove it if it feels redundant.
+    # I'm keeping it as a fallback 'quit early' button.
+    if st.button("🏁 Finish Quiz", use_container_width=True, type="secondary"):
         save_time_state()
         curr = st.session_state.get(f"radio_{i}")
         if not is_submitted:
@@ -383,137 +378,121 @@ with st.sidebar:
         st.session_state.finished = True
         st.rerun()
 
-# --- MAIN CONTENT PLACEHOLDER LOGIC ---
-# Create the placeholder on the first run, or retrieve it
-if st.session_state.main_content_placeholder is None:
-    st.session_state.main_content_placeholder = st.empty()
+# --- MAIN CONTENT ---
+st.markdown(f"#### Question {i + 1} of {total_q}")
+st.progress((i) / total_q)
 
-# Clear the placeholder to ensure no previous elements linger
-placeholder = st.session_state.main_content_placeholder
-placeholder.empty()
+with st.container(border=True):
+    st.markdown(f"### {row['Question']}")
+    
+    options = [
+        ("A", row["Option A"]), ("B", row["Option B"]),
+        ("C", row["Option C"]), ("D", row["Option D"]),
+    ]
+    display_options = [f"{letter}: {text}" for letter, text in options if pd.notna(text)]
 
-# Render all of the question content inside the placeholder
-with placeholder.container():
-    st.markdown(f"#### Question {i + 1} of {total_q}")
-    st.progress((i) / total_q)
-
-    with st.container(border=True):
-        st.markdown(f"### {row['Question']}")
+    # Restore selection by letter prefix
+    saved_ans = st.session_state.answers.get(i, None)
+    
+    radio_idx = None
+    if saved_ans:
+        if ":" in saved_ans:
+            saved_letter = saved_ans.split(":", 1)[0].strip().upper()
+            for idx, opt in enumerate(display_options):
+                if opt.startswith(f"{saved_letter}:"):
+                    radio_idx = idx
+                    break
+        elif saved_ans in display_options:
+            radio_idx = display_options.index(saved_ans)
         
-        options = [
-            ("A", row["Option A"]), ("B", row["Option B"]),
-            ("C", row["Option C"]), ("D", row["Option D"]),
-        ]
-        display_options = [f"{letter}: {text}" for letter, text in options if pd.notna(text)]
+    selected = st.radio(
+        "Select your answer:", 
+        display_options, 
+        index=radio_idx, 
+        key=f"radio_{i}", 
+        disabled=is_submitted
+    )
 
-        # Restore selection by letter prefix
-        saved_ans = st.session_state.answers.get(i, None)
-        
-        radio_idx = None
+    # Feedback Area
+    if is_submitted:
+        st.divider()
+        corr_let = find_correct_letter(row)
+
         if saved_ans:
-            if ":" in saved_ans:
-                saved_letter = saved_ans.split(":", 1)[0].strip().upper()
-                for idx, opt in enumerate(display_options):
-                    if opt.startswith(f"{saved_letter}:"):
-                        radio_idx = idx
-                        break
-            elif saved_ans in display_options:
-                radio_idx = display_options.index(saved_ans)
-                
-        # This radio button key MUST be unique per question index
-        selected = st.radio(
-            "Select your answer:", 
-            display_options, 
-            index=radio_idx, 
-            key=f"radio_{i}", 
-            disabled=is_submitted
-        )
-
-        # Feedback Area
-        if is_submitted:
-            st.divider()
-            corr_let = find_correct_letter(row)
-
-            if saved_ans:
-                if is_correct(saved_ans, row["Correct Answer"]):
-                    st.success("✅ Correct!")
-                    if corr_let and f"Rationale {corr_let}" in row and pd.notna(row[f"Rationale {corr_let}"]):
-                        st.info(f"**Rationale:** {row[f'Rationale {corr_let}']}")
-                else:
-                    if corr_let:
-                        corr_txt = row.get(f"Option {corr_let}", str(row["Correct Answer"]))
-                        st.error(f"❌ Incorrect. Correct Answer: **{corr_let}: {corr_txt}**")
-                    else:
-                        st.error(f"❌ Incorrect. Correct Answer: **{row['Correct Answer']}**")
-                    
-                    selected_letter = saved_ans.split(":", 1)[0].strip().upper()
-                    
-                    if selected_letter in ["A", "B", "C", "D"] and f"Rationale {selected_letter}" in row and pd.notna(row[f"Rationale {selected_letter}"]):
-                        st.warning(f"**Not Quite ({selected_letter}):** {row[f'Rationale {selected_letter}']}")
-
-                    if corr_let and f"Rationale {corr_let}" in row and pd.notna(row[f"Rationale {corr_let}"]):
-                        st.info(f"**Rationale for correct answer ({corr_let}):** {row[f'Rationale {corr_let}']}")
+            if is_correct(saved_ans, row["Correct Answer"]):
+                st.success("✅ Correct!")
+                if corr_let and f"Rationale {corr_let}" in row and pd.notna(row[f"Rationale {corr_let}"]):
+                    st.info(f"**Rationale:** {row[f'Rationale {corr_let}']}")
             else:
-                st.warning("⌛ Answer locked (no answer submitted).")
                 if corr_let:
                     corr_txt = row.get(f"Option {corr_let}", str(row["Correct Answer"]))
-                    st.markdown(f"**Correct Answer:** {corr_let}: {corr_txt}")
-                    if f"Rationale {corr_let}" in row and pd.notna(row[f"Rationale {corr_let}"]):
-                        st.info(f"**Rationale for correct answer ({corr_let}):** {row[f'Rationale {corr_let}']}")
+                    st.error(f"❌ Incorrect. Correct Answer: **{corr_let}: {corr_txt}**")
                 else:
-                    st.markdown(f"**Correct Answer:** {row['Correct Answer']}")
+                    st.error(f"❌ Incorrect. Correct Answer: **{row['Correct Answer']}**")
+                
+                selected_letter = saved_ans.split(":", 1)[0].strip().upper()
+                
+                if selected_letter in ["A", "B", "C", "D"] and f"Rationale {selected_letter}" in row and pd.notna(row[f"Rationale {selected_letter}"]):
+                    st.warning(f"**Not Quite ({selected_letter}):** {row[f'Rationale {selected_letter}']}")
 
-        if not is_submitted:
-            # Added key=f"hint_{i}" to ensure hint state doesn't leak to next question
-            if pd.notna(row.get("Hint")) and st.checkbox("Show Hint", key=f"hint_{i}"):
-                st.info(f"💡 Hint: {row['Hint']}")
-
-    # --- FOOTER NAV (Rendered inside the placeholder to ensure it's cleared) ---
-    col_prev, col_submit, col_next = st.columns([1, 2, 1])
-
-    with col_prev:
-        if st.button("⬅️ Previous", disabled=(i == 0), use_container_width=True, key=f"prev_{i}"):
-            handle_navigation(i - 1)
-
-    with col_submit:
-        if not is_submitted:
-            if st.button("🔒 Submit Answer", type="primary", use_container_width=True, key=f"submit_{i}"):
-                save_time_state()
-                st.session_state.answers[i] = selected
-                st.session_state.submitted_q[i] = True
-                update_score()
-                st.rerun()
-
-    with col_next:
-        if i < total_q - 1:
-            if st.button("Next ➡️", use_container_width=True, key=f"next_{i}"):
-                handle_navigation(i + 1)
+                if corr_let and f"Rationale {corr_let}" in row and pd.notna(row[f"Rationale {corr_let}"]):
+                    st.info(f"**Rationale for correct answer ({corr_let}):** {row[f'Rationale {corr_let}']}")
         else:
-            if st.button("🏁 Finish Quiz", type="primary", use_container_width=True, key=f"finish_{i}"):
-                save_time_state()
-                curr = st.session_state.get(f"radio_{i}")
-                if not is_submitted:
-                    st.session_state.answers[i] = curr
-                    st.session_state.submitted_q[i] = True
-                update_score()
-                st.session_state.finished = True
-                st.rerun()
+            st.warning("⌛ Answer locked (no answer submitted).")
+            if corr_let:
+                corr_txt = row.get(f"Option {corr_let}", str(row["Correct Answer"]))
+                st.markdown(f"**Correct Answer:** {corr_let}: {corr_txt}")
+                if f"Rationale {corr_let}" in row and pd.notna(row[f"Rationale {corr_let}"]):
+                    st.info(f"**Rationale for correct answer ({corr_let}):** {row[f'Rationale {corr_let}']}")
+            else:
+                st.markdown(f"**Correct Answer:** {row['Correct Answer']}")
+
+    if not is_submitted:
+        if pd.notna(row.get("Hint")) and st.checkbox("Show Hint"):
+            st.info(f"💡 Hint: {row['Hint']}")
+
+# --- FOOTER NAV ---
+col_prev, col_submit, col_next = st.columns([1, 2, 1])
+
+with col_prev:
+    if st.button("⬅️ Previous", disabled=(i == 0), use_container_width=True):
+        handle_navigation(i - 1)
+
+with col_submit:
+    if not is_submitted:
+        if st.button("🔒 Submit Answer", type="primary", use_container_width=True):
+            save_time_state()
+            st.session_state.answers[i] = selected
+            st.session_state.submitted_q[i] = True
+            update_score()
+            st.rerun()
+
+with col_next:
+    if i < total_q - 1:
+        if st.button("Next ➡️", use_container_width=True):
+            handle_navigation(i + 1)
+    else:
+        if st.button("🏁 Finish Quiz", type="primary", use_container_width=True):
+            save_time_state()
+            curr = st.session_state.get(f"radio_{i}")
+            if not is_submitted:
+                st.session_state.answers[i] = curr
+                st.session_state.submitted_q[i] = True
+            update_score()
+            st.session_state.finished = True
+            st.rerun()
 
 # --- AUTO-ACTION (ONLY IF TIMER EXISTS) ---
 if time_allowed is not None:
-    # Check for timeout
     if remaining is not None and remaining <= 0 and not is_submitted:
         st.session_state.time_spent[i] = time_allowed
         st.session_state.submitted_q[i] = True
         current_selection = st.session_state.get(f"radio_{i}")
         st.session_state.answers[i] = current_selection
         update_score()
-        # NOTE: Do not use st.warning here, use placeholder to display timeout message temporarily
-        # st.warning("⏰ Time's Up!") 
-        # Rerunning directly will handle the feedback display
+        st.warning("⏰ Time's Up!")
         time.sleep(1)
         st.rerun()
     elif not is_submitted:
-        # Refresh every second to update timer UI
         time.sleep(1.0)
         st.rerun()
