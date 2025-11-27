@@ -378,82 +378,81 @@ with st.sidebar:
 st.markdown(f"#### Question {i + 1} of {total_q}")
 st.progress((i) / total_q)
 
-# FIXED: Using a st.empty() placeholder creates a clean slate for every new question,
-# preventing "ghosting" of previous elements.
-main_placeholder = st.empty()
+with st.container(border=True):
+    st.markdown(f"### {row['Question']}")
+    
+    options = [
+        ("A", row["Option A"]), ("B", row["Option B"]),
+        ("C", row["Option C"]), ("D", row["Option D"]),
+    ]
+    display_options = [f"{letter}: {text}" for letter, text in options if pd.notna(text)]
 
-with main_placeholder.container():
-    # Removed 'key' argument from st.container to fix compatibility crash
-    with st.container(border=True):
-        st.markdown(f"### {row['Question']}")
+    # Restore selection by letter prefix
+    saved_ans = st.session_state.answers.get(i, None)
+    
+    radio_idx = None
+    if saved_ans:
+        if ":" in saved_ans:
+            saved_letter = saved_ans.split(":", 1)[0].strip().upper()
+            for idx, opt in enumerate(display_options):
+                if opt.startswith(f"{saved_letter}:"):
+                    radio_idx = idx
+                    break
+        elif saved_ans in display_options:
+            radio_idx = display_options.index(saved_ans)
         
-        options = [
-            ("A", row["Option A"]), ("B", row["Option B"]),
-            ("C", row["Option C"]), ("D", row["Option D"]),
-        ]
-        display_options = [f"{letter}: {text}" for letter, text in options if pd.notna(text)]
+    selected = st.radio(
+        "Select your answer:", 
+        display_options, 
+        index=radio_idx, 
+        key=f"radio_{i}", 
+        disabled=is_submitted
+    )
 
-        saved_ans = st.session_state.answers.get(i, None)
-        
-        radio_idx = None
+    # Feedback Area
+    if is_submitted:
+        st.divider()
+        corr_let = find_correct_letter(row)
+
         if saved_ans:
-            if ":" in saved_ans:
-                saved_letter = saved_ans.split(":", 1)[0].strip().upper()
-                for idx, opt in enumerate(display_options):
-                    if opt.startswith(f"{saved_letter}:"):
-                        radio_idx = idx
-                        break
-            elif saved_ans in display_options:
-                radio_idx = display_options.index(saved_ans)
-            
-        selected = st.radio(
-            "Select your answer:", 
-            display_options, 
-            index=radio_idx, 
-            key=f"radio_{i}", 
-            disabled=is_submitted
-        )
-
-        # Feedback Area
-        if is_submitted:
-            st.divider()
-            corr_let = find_correct_letter(row)
-
-            if saved_ans:
-                if is_correct(saved_ans, row["Correct Answer"]):
-                    st.success("✅ Correct!")
-                    if corr_let and f"Rationale {corr_let}" in row and pd.notna(row[f"Rationale {corr_let}"]):
-                        st.info(f"**Rationale:** {row[f'Rationale {corr_let}']}")
-                else:
-                    if corr_let:
-                        corr_txt = row.get(f"Option {corr_let}", str(row["Correct Answer"]))
-                        st.error(f"❌ Incorrect. Correct Answer: **{corr_let}: {corr_txt}**")
-                    else:
-                        st.error(f"❌ Incorrect. Correct Answer: **{row['Correct Answer']}**")
-                    
-                    selected_letter = saved_ans.split(":", 1)[0].strip().upper()
-                    
-                    if selected_letter in ["A", "B", "C", "D"] and f"Rationale {selected_letter}" in row and pd.notna(row[f"Rationale {selected_letter}"]):
-                        st.warning(f"**Not Quite ({selected_letter}):** {row[f'Rationale {selected_letter}']}")
-
-                    if corr_let and f"Rationale {corr_let}" in row and pd.notna(row[f"Rationale {corr_let}"]):
-                        st.info(f"**Rationale for correct answer ({corr_let}):** {row[f'Rationale {corr_let}']}")
+            if is_correct(saved_ans, row["Correct Answer"]):
+                st.success("✅ Correct!")
+                if corr_let and f"Rationale {corr_let}" in row and pd.notna(row[f"Rationale {corr_let}"]):
+                    st.info(f"**Rationale:** {row[f'Rationale {corr_let}']}")
             else:
-                st.warning("⌛ Answer locked (no answer submitted).")
                 if corr_let:
                     corr_txt = row.get(f"Option {corr_let}", str(row["Correct Answer"]))
-                    st.markdown(f"**Correct Answer:** {corr_let}: {corr_txt}")
-                    if f"Rationale {corr_let}" in row and pd.notna(row[f"Rationale {corr_let}"]):
-                        st.info(f"**Rationale for correct answer ({corr_let}):** {row[f'Rationale {corr_let}']}")
+                    st.error(f"❌ Incorrect. Correct Answer: **{corr_let}: {corr_txt}**")
                 else:
-                    st.markdown(f"**Correct Answer:** {row['Correct Answer']}")
+                    st.error(f"❌ Incorrect. Correct Answer: **{row['Correct Answer']}**")
+                
+                selected_letter = saved_ans.split(":", 1)[0].strip().upper()
+                
+                if selected_letter in ["A", "B", "C", "D"] and f"Rationale {selected_letter}" in row and pd.notna(row[f"Rationale {selected_letter}"]):
+                    st.warning(f"**Not Quite ({selected_letter}):** {row[f'Rationale {selected_letter}']}")
 
-        if not is_submitted:
-            if pd.notna(row.get("Hint")) and st.checkbox("Show Hint", key=f"hint_{i}"):
-                st.info(f"💡 Hint: {row['Hint']}")
+                if corr_let and f"Rationale {corr_let}" in row and pd.notna(row[f"Rationale {corr_let}"]):
+                    st.info(f"**Rationale for correct answer ({corr_let}):** {row[f'Rationale {corr_let}']}")
+        else:
+            st.warning("⌛ Answer locked (no answer submitted).")
+            if corr_let:
+                corr_txt = row.get(f"Option {corr_let}", str(row["Correct Answer"]))
+                st.markdown(f"**Correct Answer:** {corr_let}: {corr_txt}")
+                if f"Rationale {corr_let}" in row and pd.notna(row[f"Rationale {corr_let}"]):
+                    st.info(f"**Rationale for correct answer ({corr_let}):** {row[f'Rationale {corr_let}']}")
+            else:
+                st.markdown(f"**Correct Answer:** {row['Correct Answer']}")
+
+    if not is_submitted:
+        # Added key=f"hint_{i}" to ensure hint state doesn't leak to next question
+        if pd.notna(row.get("Hint")) and st.checkbox("Show Hint", key=f"hint_{i}"):
+            st.info(f"💡 Hint: {row['Hint']}")
 
 # --- FOOTER NAV ---
 col_prev, col_submit, col_next = st.columns([1, 2, 1])
+
+# Added unique keys (e.g., f"prev_{i}") to all footer buttons to prevents ghost clicks
+# and state carry-over when the timer forces a re-run.
 
 with col_prev:
     if st.button("⬅️ Previous", disabled=(i == 0), use_container_width=True, key=f"prev_{i}"):
