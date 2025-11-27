@@ -150,6 +150,11 @@ def handle_navigation(new_index):
     if not st.session_state.submitted_q.get(i, False):
         st.session_state.answers[i] = current_selected
     
+    # Clear the radio state for ALL questions to prevent bleed
+    keys_to_delete = [k for k in st.session_state.keys() if k.startswith("radio_")]
+    for k in keys_to_delete:
+        del st.session_state[k]
+    
     # Update pointer
     st.session_state.index = new_index
     st.session_state.question_start_time = time.time()
@@ -496,3 +501,4 @@ if time_allowed is not None:
     elif not is_submitted:
         time.sleep(1.0)
         st.rerun()
+
