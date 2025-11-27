@@ -147,6 +147,10 @@ def handle_navigation(new_index):
     current_selected = st.session_state.get(f"radio_{i}")
     if not st.session_state.submitted_q.get(i, False):
         st.session_state.answers[i] = current_selected
+        
+    # Clear the radio widget for the NEW question to prevent state bleed
+    if f"radio_{new_index}" in st.session_state:
+        del st.session_state[f"radio_{new_index}"]
     
     # Update pointer
     st.session_state.index = new_index
@@ -495,3 +499,4 @@ if time_allowed is not None:
         # Refresh every second to update timer UI
         time.sleep(1.0)
         st.rerun()
+
