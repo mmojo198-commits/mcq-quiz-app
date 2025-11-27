@@ -253,3 +253,249 @@ if st.session_state.questions is not None and not st.session_state.quiz_started:
 # ---------------------------
 # State 3: Results
 # ---------------------------
+if st.session_state.finished:
+    st.title("🏆 Quiz Results")
+    
+    total_q = len(st.session_state.questions)
+    percentage = (st.session_state.score / total_q) * 100 if total_q > 0 else 0
+    
+    col_res1, col_res2 = st.columns([1, 3])
+    with col_res1:
+        st.metric("Final Score", f"{st.session_state.score} / {total_q}")
+    with col_res2:
+        st.progress(st.session_state.score / total_q if total_q > 0 else 0)
+        st.caption(f"Accuracy: {percentage:.1f}%")
+
+    st.divider()
+    
+    # Summary Table
+    results_data = []
+    for idx in range(total_q):
+        q = st.session_state.questions.iloc[idx]
+        user_ans = st.session_state.answers.get(idx)
+        correct_raw = q["Correct Answer"]
+        
+        is_corr = False
+        if user_ans:
+            is_corr = is_correct(user_ans, correct_raw)
+            
+        results_data.append({
+            "No.": idx + 1,
+            "Question": q["Question"],
+            "Your Answer": user_ans if user_ans else "Skipped",
+            "Correct Answer": correct_raw,
+            "Result": "✅" if is_corr else "❌"
+        })
+    
+    st.dataframe(pd.DataFrame(results_data), use_container_width=True, hide_index=True)
+    
+    col_act1, col_act2 = st.columns(2)
+    with col_act1:
+        if st.button("🔁 Retry Same Questions", use_container_width=True):
+            st.session_state.quiz_started = False
+            st.session_state.finished = False
+            st.rerun()
+    with col_act2:
+        if st.button("📂 Upload New File", use_container_width=True):
+            for k in list(st.session_state.keys()):
+                del st.session_state[k]
+            st.rerun()
+    st.stop()
+
+# ---------------------------
+# State 4: Active Quiz UI
+# ---------------------------
+questions = st.session_state.questions
+i = st.session_state.index
+total_q = len(questions)
+row = questions.iloc[i]
+is_submitted = st.session_state.submitted_q.get(i, False)
+time_allowed = st.session_state.timer_per_question
+
+# --- SIDEBAR: Timer & Map ---
+with st.sidebar:
+    st.markdown("### ⏳ Timer")
+    
+    if st.session_state.question_start_time is None:
+        st.session_state.question_start_time = time.time()
+        
+    if time_allowed is None:
+        st.markdown("<h3 style='text-align: center; color: green; margin: 0;'>Unlimited</h3>", unsafe_allow_html=True)
+        st.progress(1.0)
+        remaining = None
+    else:
+        if is_submitted:
+            time_spent = st.session_state.time_spent.get(i, 0)
+        else:
+            elapsed = time.time() - st.session_state.question_start_time
+            previous_time = st.session_state.time_spent.get(i, 0)
+            time_spent = min(time_allowed, previous_time + elapsed)
+            
+        remaining = max(0, time_allowed - time_spent)
+        
+        timer_color = "red" if remaining < 5 else "blue"
+        st.markdown(f"<h1 style='text-align: center; color: {timer_color}; margin: 0;'>{int(remaining)}s</h1>", unsafe_allow_html=True)
+        st.progress(min(1.0, max(0.0, remaining / time_allowed if time_allowed > 0 else 0)))
+
+    st.divider()
+    st.markdown("### 🗺️ Question Map")
+    
+    cols_per_row = 4
+    for r in range(0, total_q, cols_per_row):
+        cols = st.columns(cols_per_row)
+        for c_idx, q_idx in enumerate(range(r, min(r + cols_per_row, total_q))):
+            with cols[c_idx]:
+                btn_type = "secondary"
+                lbl = str(q_idx + 1)
+                
+                if q_idx == i:
+                    btn_type = "primary"
+                    lbl = f"▶ {q_idx+1}"
+                elif st.session_state.submitted_q.get(q_idx):
+                    hist_ans = st.session_state.answers.get(q_idx)
+                    if hist_ans and is_correct(hist_ans, st.session_state.questions.iloc[q_idx]["Correct Answer"]):
+                        lbl = f"✓ {q_idx+1}"
+                    else:
+                        lbl = f"✗ {q_idx+1}"
+                
+                if st.button(lbl, key=f"nav_{q_idx}", use_container_width=True, type=btn_type):
+                    handle_navigation(q_idx)
+                     
+    st.divider()
+    
+    if st.button("🏁 Finish Quiz", key="sidebar_finish", use_container_width=True, type="secondary"):
+        save_time_state()
+        curr = st.session_state.get(f"radio_{i}")
+        if not is_submitted:
+            st.session_state.answers[i] = curr
+            st.session_state.submitted_q[i] = True
+            
+        update_score()
+        st.session_state.finished = True
+        st.rerun()
+
+# --- MAIN CONTENT ---
+st.markdown(f"#### Question {i + 1} of {total_q}")
+st.progress((i) / total_q)
+
+# FIXED: Using a st.empty() placeholder creates a clean slate for every new question,
+# preventing "ghosting" of previous elements.
+main_placeholder = st.empty()
+
+with main_placeholder.container():
+    # Removed 'key' argument from st.container to fix compatibility crash
+    with st.container(border=True):
+        st.markdown(f"### {row['Question']}")
+        
+        options = [
+            ("A", row["Option A"]), ("B", row["Option B"]),
+            ("C", row["Option C"]), ("D", row["Option D"]),
+        ]
+        display_options = [f"{letter}: {text}" for letter, text in options if pd.notna(text)]
+
+        saved_ans = st.session_state.answers.get(i, None)
+        
+        radio_idx = None
+        if saved_ans:
+            if ":" in saved_ans:
+                saved_letter = saved_ans.split(":", 1)[0].strip().upper()
+                for idx, opt in enumerate(display_options):
+                    if opt.startswith(f"{saved_letter}:"):
+                        radio_idx = idx
+                        break
+            elif saved_ans in display_options:
+                radio_idx = display_options.index(saved_ans)
+            
+        selected = st.radio(
+            "Select your answer:", 
+            display_options, 
+            index=radio_idx, 
+            key=f"radio_{i}", 
+            disabled=is_submitted
+        )
+
+        # Feedback Area
+        if is_submitted:
+            st.divider()
+            corr_let = find_correct_letter(row)
+
+            if saved_ans:
+                if is_correct(saved_ans, row["Correct Answer"]):
+                    st.success("✅ Correct!")
+                    if corr_let and f"Rationale {corr_let}" in row and pd.notna(row[f"Rationale {corr_let}"]):
+                        st.info(f"**Rationale:** {row[f'Rationale {corr_let}']}")
+                else:
+                    if corr_let:
+                        corr_txt = row.get(f"Option {corr_let}", str(row["Correct Answer"]))
+                        st.error(f"❌ Incorrect. Correct Answer: **{corr_let}: {corr_txt}**")
+                    else:
+                        st.error(f"❌ Incorrect. Correct Answer: **{row['Correct Answer']}**")
+                    
+                    selected_letter = saved_ans.split(":", 1)[0].strip().upper()
+                    
+                    if selected_letter in ["A", "B", "C", "D"] and f"Rationale {selected_letter}" in row and pd.notna(row[f"Rationale {selected_letter}"]):
+                        st.warning(f"**Not Quite ({selected_letter}):** {row[f'Rationale {selected_letter}']}")
+
+                    if corr_let and f"Rationale {corr_let}" in row and pd.notna(row[f"Rationale {corr_let}"]):
+                        st.info(f"**Rationale for correct answer ({corr_let}):** {row[f'Rationale {corr_let}']}")
+            else:
+                st.warning("⌛ Answer locked (no answer submitted).")
+                if corr_let:
+                    corr_txt = row.get(f"Option {corr_let}", str(row["Correct Answer"]))
+                    st.markdown(f"**Correct Answer:** {corr_let}: {corr_txt}")
+                    if f"Rationale {corr_let}" in row and pd.notna(row[f"Rationale {corr_let}"]):
+                        st.info(f"**Rationale for correct answer ({corr_let}):** {row[f'Rationale {corr_let}']}")
+                else:
+                    st.markdown(f"**Correct Answer:** {row['Correct Answer']}")
+
+        if not is_submitted:
+            if pd.notna(row.get("Hint")) and st.checkbox("Show Hint", key=f"hint_{i}"):
+                st.info(f"💡 Hint: {row['Hint']}")
+
+# --- FOOTER NAV ---
+col_prev, col_submit, col_next = st.columns([1, 2, 1])
+
+with col_prev:
+    if st.button("⬅️ Previous", disabled=(i == 0), use_container_width=True, key=f"prev_{i}"):
+        handle_navigation(i - 1)
+
+with col_submit:
+    if not is_submitted:
+        if st.button("🔒 Submit Answer", type="primary", use_container_width=True, key=f"submit_{i}"):
+            save_time_state()
+            st.session_state.answers[i] = selected
+            st.session_state.submitted_q[i] = True
+            update_score()
+            st.rerun()
+
+with col_next:
+    if i < total_q - 1:
+        if st.button("Next ➡️", use_container_width=True, key=f"next_{i}"):
+            handle_navigation(i + 1)
+    else:
+        if st.button("🏁 Finish Quiz", type="primary", use_container_width=True, key=f"finish_{i}"):
+            save_time_state()
+            curr = st.session_state.get(f"radio_{i}")
+            if not is_submitted:
+                st.session_state.answers[i] = curr
+                st.session_state.submitted_q[i] = True
+            update_score()
+            st.session_state.finished = True
+            st.rerun()
+
+# --- AUTO-ACTION (ONLY IF TIMER EXISTS) ---
+if time_allowed is not None:
+    # Check for timeout
+    if remaining is not None and remaining <= 0 and not is_submitted:
+        st.session_state.time_spent[i] = time_allowed
+        st.session_state.submitted_q[i] = True
+        current_selection = st.session_state.get(f"radio_{i}")
+        st.session_state.answers[i] = current_selection
+        update_score()
+        st.warning("⏰ Time's Up!")
+        time.sleep(1)
+        st.rerun()
+    elif not is_submitted:
+        # Refresh every second to update timer UI
+        time.sleep(1.0)
+        st.rerun()
