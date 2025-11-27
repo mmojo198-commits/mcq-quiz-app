@@ -152,6 +152,9 @@ def handle_navigation(new_index):
     if not st.session_state.submitted_q.get(i, False):
         st.session_state.answers[i] = current_selected
     
+    # Clear the last submitted question tracker on navigation
+    st.session_state.last_submitted_question = None
+    
     # Increment navigation counter to force new radio widgets
     st.session_state.nav_counter = st.session_state.get('nav_counter', 0) + 1
     
@@ -501,4 +504,5 @@ if time_allowed is not None:
     elif not is_submitted:
         time.sleep(1.0)
         st.rerun()
+
 
